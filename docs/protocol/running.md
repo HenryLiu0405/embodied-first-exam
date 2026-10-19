@@ -67,7 +67,7 @@ The rule is PROTOCOL Appendix H.5; how the runner applies it:
   and is flagged for audit.
 
 ## Results
-Results are not committed (published on the results site and the Hugging Face dataset, keyed by run id
+Results are not committed (published on the [results site](https://www.embodied-first-exam.ai) and the Hugging Face dataset, keyed by run id
 `<harness>-<model>-<effort>`, the model token with underscores: `codex-gpt6_luna-xhigh`; provider, tier and settings go
 in the metadata). `scripts/write_task_results.py` writes, per task and run id, `README.md`, `config.json` (the trial's
 effective configuration: `protocol_version`, `mode`, `cutoff_s`, `reset_budget`, `slowdown`, `seed`, `network`,
@@ -161,19 +161,65 @@ from a tree whose files share mtimes (a git checkout, `git archive`, tar, `cp -r
 task's equal-size file in its image, silently, with `--no-cache` too (issue #258; rootless podman builds are not
 affected). **Never build a task image from a tree without stamping it:** `scripts/stamp_mtimes.py` gives every file a
 mtime derived from its content, so different files never share one (content, modes and DIGEST unchanged; git ignores
-mtimes). `scripts/run_agent_batch.sh`, `/validate` and `scripts/task_seed.py materialize` build from stamped copies. For a bare `harbor run` or `harbor trial regrade`:
+mtimes). `scripts/run_agent_batch.sh`, `/validate` and `scripts/task_seed.py materialize` build from stamped copies; `harbor run` with this repository's set flags (`-d embodied-first-exam`, `--core`, `--all`, a mode flag, `--benchmark`) stamps the task dirs it runs in place. For a bare `harbor run -p` or `harbor trial regrade`:
 ```bash
 c=$(python3 scripts/stamp_mtimes.py stage tasks/<benchmark>/<task> "$(mktemp -d)") && harbor run -p "$c" -a oracle ...   # a stamped copy
 python3 scripts/stamp_mtimes.py tasks           # or stamp the checkout in place (again after every pull: --check tells)
 ```
 
+## Without Docker: rootless podman (e.g. a Slurm cluster)
+Harbor runs the tasks on podman with `-e podman`, through podman's Docker-compatible API and the docker-compose plugin.
+Tested with the oracle on cgroup v1 and v2 nodes without root, `/etc/subuid` entries or a user systemd session. Run
+everything inside an allocation on the compute node, with `HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME` and `TMPDIR` on
+node-local scratch (podman's storage does not work on most network file systems):
+
+1. podman: the cluster's, or a static build (github.com/mgoltzsche/podman-static; 5.8.x on cgroup v1, which 6.x refuses),
+   and the docker-compose v2 binary in `~/.docker/cli-plugins/docker-compose`.
+2. `~/.config/containers/containers.conf`, for a static build unpacked into `$P`:
+   ```toml
+   [engine]
+   helper_binaries_dir = ["$P/usr/local/lib/podman"]
+   conmon_path = ["$P/usr/local/lib/podman/conmon"]
+   cgroup_manager = "cgroupfs"        # no user systemd session
+   events_logger = "file"
+   [engine.runtimes]
+   crun = ["$P/usr/local/bin/crun"]
+   [network]
+   firewall_driver = "none"           # only on a node without iptables
+   ```
+   plus `policy.json` (the build's `etc/containers/policy.json`), `registries.conf` with
+   `unqualified-search-registries = ["docker.io"]` and `short-name-mode = "permissive"` (Harbor's egress sidecar is
+   built `FROM` a short image name, and without a terminal podman refuses to ask), and, without `/etc/subuid` entries,
+   `storage.conf` with `[storage.options.overlay] ignore_chown_errors = "true"`.
+3. Without a user systemd session netavark cannot start aardvark-dns through `systemd-run`; a `systemd-run` early on
+   `PATH` that drops its options and execs the command works.
+4. Start the API and run:
+   ```bash
+   podman system service --time=0 &
+   export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock
+   harbor run -e podman -d embodied-first-exam@all -p tasks/<benchmark>/<task> -a oracle -y -o $PWD/jobs
+   ```
+5. GPU tasks: podman ignores compose's `driver: nvidia` device request, and the task's processes then find no driver
+   (`Found no NVIDIA driver`, `libnvidia-ml.so.1: cannot open shared object file`). Generate a CDI spec for the
+   allocation's GPUs (`nvidia-ctk cdi generate --output=<dir>/nvidia.yaml`, and `cdi_spec_dirs = ["<dir>"]` under
+   `[engine]`), and run a stamped copy whose compose files ask for the CDI device instead (both
+   `environment/docker-compose.yaml` and `tests/docker-compose.yaml`):
+   ```bash
+   c=$(python3 scripts/stamp_mtimes.py stage tasks/<benchmark>/<task> "$(mktemp -d)")
+   find "$c" -name docker-compose.yaml -exec sed -i -e 's/- driver: nvidia/- driver: cdi/' \
+     -e 's/^\( *\)count: 1$/\1device_ids: ["nvidia.com\/gpu=all"]/' {} +
+   harbor run -e podman -p "$c" -a oracle -y -o $PWD/jobs
+   ```
+6. The `rcb_monitor` sidecar can stay "Stopping" after a trial under rootless podman on cgroup v2; stop its container
+   (or the `monitor.py` process) by hand. On cgroup v1 the resource caps are not applied (`RCB_LIMITS_ENFORCE` stays 0).
+
 ## Running a two-mode batch (privileged + standard)
 ```bash
 python3 scripts/stamp_mtimes.py tasks                   # first ("Building task images" above)
-harbor run -p tasks/robotwin-2 -i robotwin_2_0_<t1>-privileged -i robotwin_2_0_<t2>-privileged -a codex -m openai/gpt-6-luna -n 3 -o $PWD/exps/jobs --job-name <job-priv>
-harbor run -p tasks/robotwin-2 -i robotwin_2_0_<t1>-standard ... -a codex -m openai/gpt-6-luna -n 3 -o $PWD/exps/jobs --job-name <job-std>
+harbor run -p tasks/robotwin-2 -i robotwin_2_0_<t1>-privileged -i robotwin_2_0_<t2>-privileged -a codex -m openai/gpt-6-astra -n 3 -o $PWD/exps/jobs --job-name <job-priv>
+harbor run -p tasks/robotwin-2 -i robotwin_2_0_<t1>-standard ... -a codex -m openai/gpt-6-astra -n 3 -o $PWD/exps/jobs --job-name <job-std>
 harbor trial regrade --help                             # re-run the verifier of a recorded trial (a grader error, a missing video)
-scripts/write_task_results.py exps/jobs <job> <run-id> "<agent label>" --out <dir outside the repository>   # per-task results (README, video, cost)
+python3 scripts/write_task_results.py exps/jobs <job> <run-id> "<agent label>" --out <dir outside the repository>   # per-task results (README, video, cost)
 ```
 `CODEX_FORCE_AUTH_JSON=1` uses a ChatGPT-subscription login (`codex login --device-auth`) instead of an API key.
 Use an absolute `-o` (compose cp is noisy otherwise); 3 concurrent trials fit one RTX 4090 with headroom for the
@@ -251,7 +297,7 @@ timeout=...)`): after the environment has been built and started and the harness
 own. A standard-mode `sim` service starts with the environment; what it has not finished starting by then is waited out
 inside the agent's time. The service's own clock (`/spec.budget.wall_clock_s`, `meta.time_left_s`) counts the same
 number from the agent's first request to the service (kept through a restart) and never runs out before Harbor's; it only
-reports, except that RoboARC's service ends the episode when its count reaches 0 (docs/benchmarks/roboarc.md). At the cutoff Harbor stops the agent (`AgentTimeoutError`), collects the artifacts and runs the verifier, so
+reports, except that RoboARC's service ends the episode when its count reaches 0 (tasks/roboarc/README.md). At the cutoff Harbor stops the agent (`AgentTimeoutError`), collects the artifacts and runs the verifier, so
 the trial is graded as it stands: a result, not an infrastructure failure, never run again.
 
 **Official runs** pass no multiplier and add nothing to the instruction (Official runs above), so `## Time limit` is the
@@ -263,8 +309,8 @@ README row, `RCB_WALL_CLOCK_S` and `DIGEST`), and state old -> new and why in th
 changes in place and keeps its name; results under another cutoff are a different configuration (`config_key`). Not
 derived from the cutoff: the token budget, the resource limits, reset budgets, step caps, verifier timeouts. When
 raising one, look at collect-hook and verifier budgets sized for an episode as long as the agent's time (RoboCasa,
-RoboCasa365 and RoboCasa-GR1 `COLLECT_TIMEOUT_S`; RoboLab, YAMLab, DexJoCo, BEHAVIOR-1K: their `docs/benchmarks/`
-pages) and, for RoboOlympics' exported matches, a match's wall time at its slowdown plus the reviews between points.
+RoboCasa365 and RoboCasa-GR1 `COLLECT_TIMEOUT_S`; RoboLab, YAMLab, DexJoCo, BEHAVIOR-1K: their `tasks/<benchmark>/README.md`
+pages) and, for Embodied Olympics - Match's exported matches, a match's wall time at its slowdown plus the reviews between points.
 
 ## Base images
 Every base image is a tag of one of two packages (PROTOCOL §1): `ghcr.io/mll-lab-nu/efe:<name>-<images/<name>/VERSION>` (public), or `ghcr.io/mll-lab-nu/efe-private:<name>-<VERSION>` for an image with `images/<name>/BUILD_ONLY` (org members only): `scripts/build_images.sh`
@@ -273,6 +319,11 @@ that has `write:packages`). A new image is a new tag of `efe`, which is public, 
 change (a new package would start private, and the API cannot change that). An image with `images/<name>/BUILD_ONLY` (Isaac Sim inside: RoboLab, BEHAVIOR-1K) is never
 public: every host builds it (the marker file says how, and what licences and data it needs), and maintainers may keep
 a private package for org members.
+A files-only image (`images/<name>/FILES.json`) is no docker build: `scripts/files_image.py build <name>` writes it byte
+for byte from the repository, so it has the digest the task Dockerfiles pin (`COPY --from=<tag>@sha256:…`), and loads it;
+`files_image.py push` pushes those same bytes (`docker push` would recompress the layer). A private one built locally
+serves the tasks unchanged on Docker's containerd image store (Docker Engine 29's and Docker Desktop's default); the
+classic store resolves a digest only for a pulled image.
 
 ## What an agent's container reaches
 Every task's `[agent]` allowlist is one list, `HOSTS` in `scripts/set_agent_egress.py`: the model APIs and the package

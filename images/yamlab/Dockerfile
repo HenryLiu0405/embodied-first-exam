@@ -1,4 +1,4 @@
-# eai-yamlab: YAMLab (github.com/ARISE-Initiative/yamlab @ ec0455d, MIT) on Isaac Sim 5.1.0 + Isaac Lab @ f4aa17f (the
+# yamlab: YAMLab (github.com/ARISE-Initiative/yamlab @ ec0455d, MIT) on Isaac Sim 5.1.0 + Isaac Lab @ f4aa17f (the
 # commit YAMLab's install.sh pins), torch 2.7.0+cu128, LeRobot (YAMLab's fork, Apache-2.0) for its recorder imports.
 # Every Python package is pinned in images/yamlab/requirements.lock (pip freeze of the reference build). The task assets
 # (YAMLab's object USDs for PutPotOnCooktop and HangMugOnTree, MIT, from the Hugging Face dataset yamlab/yamlab_datasets
@@ -53,9 +53,12 @@ RUN set -e; grep -v '^#' /opt/isaac-assets/web_assets.txt | while read -r sha ur
 # (images/yamlab/requirements.lock, without resolving: the reference environment is what upstream's sequence of pip
 # installs leaves, including a psutil newer than isaacsim-kernel's pin), and the build fails unless the result is exactly
 # the lock (editable checkouts aside: Isaac Lab, LeRobot and YAMLab at the commits above).
+# Packages an unpinned upstream install step pulls in today but the lock does not list are removed first, so a fresh
+# build still ends at exactly the lock.
 COPY images/yamlab/requirements.lock /opt/requirements.lock
 RUN uv pip install --no-deps --index-strategy unsafe-best-match --extra-index-url https://download.pytorch.org/whl/cu128 \
       --extra-index-url https://pypi.nvidia.com -r /opt/requirements.lock && rm -rf /root/.cache/uv && \
+    uv pip freeze --exclude-editable | grep -vxFf /opt/requirements.lock | sed 's/[ =@].*//' | xargs -r uv pip uninstall && \
     uv pip freeze --exclude-editable | diff - /opt/requirements.lock && echo "environment == requirements.lock"
 # Kit caches (shaders, extension registry, user data) live under /cache so a task's compose can keep them in a volume
 RUN mkdir -p /cache/ov-cache /cache/ov-data /cache/ov-logs /root/.cache /root/.local/share /root/.nvidia-omniverse /app/output && \
