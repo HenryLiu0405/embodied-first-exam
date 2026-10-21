@@ -31,7 +31,7 @@ simulator = "roboarc"
 robot = "aloha-2"
 family = "knot_untying"
 mode = "standard"                  # RGB + proprioception only; no object poses, no success predicate, no reset
-dynamics = "static"               # scene dynamics (docs/protocol/README.md §2.14): scripts/task_dynamics.toml
+dynamics = "static"               # scene dynamics (docs/protocol/README.md §2.14): the task's own declaration
 protocol = "eai-standard/2.4"
 oracle = "full"
 difficulty = "very_easy"
@@ -52,7 +52,7 @@ recommended_gpu = "L40S 48GB / RTX 4090 24GB / L4 24GB (sm_86 or newer)"
 verifier_min_cpus = 2.0
 verifier_min_memory_gb = 6.0
 verifier_min_gpu_memory_gb = 2.0
-measured = "partial MuJoCo measurements of 2026-10-13 (rendering off) with the protocol's margin; calibration pending; GPU 2 GB: owner 10-17, board 0150 (batch_eval_live trial peak 1.1 GB on 24 GB cards)"
+measured = "partial MuJoCo measurements of 2026-10-13 (rendering off) with the protocol's margin; calibration pending; GPU 2 GB: owner 10-17 (evaluation-pool trial peak 1.1 GB on 24 GB cards)"
 
 [metadata.resources.limits]
 # agent-phase limits in GiB (docs/protocol/README.md §2.10); scope: trial = every container, agent = the agent's container;

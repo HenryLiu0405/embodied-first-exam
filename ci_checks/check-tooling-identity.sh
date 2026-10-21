@@ -8,7 +8,8 @@
 #    - the graders, tests/grade.py (one version per mode).
 #    A file a task's Dockerfile takes from a files-only image (`COPY --from=<image@digest> /<file> <dest>`, images/<name>/
 #    FILES.json, scripts/files_image.py) counts as a copy at <context>/<basename of dest> with FILES.json's sha256, and
-#    the line must name the image FILES.json pins.
+#    the line must name the image FILES.json pins (contexts: environment/, tests/ and a sidecar's own environment/sim/ or
+#    environment/scorer/).
 #    A change to one of them is rolled out to every task of the benchmark at once. Same approach as ci_checks/benchmarks/robopaint/advisory-tooling.sh.
 #    Tasks the benchmark's own exporter wrote (task.toml [metadata] exporter: Embodied Olympics, PROTOCOL §4c) are a group of their own,
 #    one per exporter and [metadata] skill_in_loop.
@@ -22,7 +23,7 @@
 # 3. The eai-standard/2.3 realtime layer (every task whose metadata.protocol is 2.3: HumanoidBench, BiGym 2.0
 #    standard-realtime): the service's environment/sim/rcb_realtime.py and the agent's environment/rcb_client.py are
 #    byte-identical to their one source, embodied_first_exam/standard/realtime/ (docs/protocol/standard_mode.md,
-#    "Standard-realtime mode"), and so is every copy of that source under embodied_first_exam/benchmarks/*/realtime/.
+#    "Standard-realtime mode").
 # 4. DexToolBench and the MuJoCo Playground tasks that serve the same service (ALOHA, Panda), MetaWorld+ and RoboTwin
 #    2.0. Every file shared by the tasks of a mode is byte-identical
 #    within the benchmark and mode (FAMILY_SHARED: service, client, graders, tests/test.sh, Dockerfiles, the oracle's
@@ -53,9 +54,6 @@ SHARED = {"environment/rcb_client.py", "environment/rcb1.py", "environment/sim/s
 LAYER = {"environment/rcb_client.py": "rcb_client.py", "environment/rcb1.py": "rcb1.py", "environment/sim/rcb_limited.py": "rcb_limited.py",
          "environment/sim/rcb1.py": "rcb1.py", "environment/sim/run.sh": "run.sh"}
 sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()[:16]  # noqa: E731
-# board 0151 (2026-10-17): the layer before final_verdict accepted a live verdict; its copies stay valid while each
-# benchmark's pull request regenerates its tasks onto the new layer (remove this once none is left)
-PREV_LIMITED = {"2.2": "064e29250cc1b14d", "2.4": "aab663c695d49fd5"}
 # 4. (label, tooling module) by directory prefix; a task that serves
 # environment/sim/server_mj.py belongs to the DexToolBench family whatever its prefix (MuJoCo Playground ALOHA / Panda)
 FAMILY = {"dextoolbench_": ("dextoolbench", "rcb_dtb.py"), "metaworldplus-": ("metaworldplus", "mw_tool.py"),
@@ -87,13 +85,16 @@ for fj in sorted(Path(images).glob("*/FILES.json")):
 
 def from_files_image(task_dir: str) -> dict:
     """{<context>/<basename of dest>: sha} of the files the task's Dockerfiles take from a files-only image (FILES.json's
-    sha256 of each: what the pinned image holds); a line files_image.copied_from cannot resolve is a failure."""
+    sha256 of each: what the pinned image holds); a line files_image.copied_from cannot resolve is a failure. A sidecar
+    built from its own directory (environment/sim/, environment/scorer/: its Dockerfile, the directory at /srv) counts
+    at environment/<dir>/<its path under /srv>: where the directory's copy would be."""
     got = {}
-    for ctx in ("environment", "tests"):
+    for ctx in ("environment", "tests", "environment/sim", "environment/scorer"):
         out, problems = files_image.copied_from(Path(task_dir) / ctx / "Dockerfile")
         bad.extend(f"{os.path.basename(task_dir)}: {p} (regenerate the task)" for p in problems)
         for dest, f in out.items():
-            got[f"{ctx}/{os.path.basename(dest)}"] = PINNED[f][:16]
+            side = ctx.count("/") and dest.startswith("/srv/")
+            got[f"{ctx}/{dest[len('/srv/'):] if side else os.path.basename(dest)}"] = PINNED[f][:16]
     return got
 
 
@@ -104,13 +105,6 @@ RT_SRC = os.path.join(src, "realtime")
 RT_LAYER = {"environment/sim/rcb_realtime.py": "rcb_realtime.py", "environment/rcb_client.py": "rcb_client.py"}
 rt_canon = {f: sha(os.path.join(RT_SRC, f)) for f in set(RT_LAYER.values()) if os.path.isfile(os.path.join(RT_SRC, f))}
 n_rt = 0
-efe_dir = os.path.join(ROOTD, "embodied_first_exam", "benchmarks")   # a benchmark's shared task code
-for b in (sorted(os.listdir(efe_dir)) if os.path.isdir(efe_dir) else []):
-    for f in sorted(rt_canon):
-        p = os.path.join(efe_dir, b, "realtime", f)
-        if os.path.isfile(p) and sha(p) != rt_canon[f]:
-            bad.append(f"embodied_first_exam/benchmarks/{b}/realtime/{f} differs from embodied_first_exam/standard/realtime/{f} "
-                       "(the eai-standard/2.3 layer has one source)")
 
 
 def sim_service(compose: str) -> str:
@@ -160,7 +154,7 @@ for t in sorted(TDIR):
                     bad.append(f"{t}: {rel} (from a files-only image) differs from {srcf}")
             elif not os.path.isfile(p):
                 bad.append(f"{t}: {rel} missing (eai-standard/{ver} layer, {srcf})")
-            elif sha(p) != ref.get(f) and not (f == "rcb_limited.py" and sha(p) == PREV_LIMITED.get(ver)):
+            elif sha(p) != ref.get(f):
                 bad.append(f"{t}: {rel} differs from {srcf} (regenerate the task)")
         cf = os.path.join(TDIR[t], "environment/docker-compose.yaml")
         blk = sim_service(cf) if os.path.isfile(cf) else ""
@@ -191,6 +185,13 @@ for t in sorted(TDIR):
                 seen[fam][role].setdefault(h, f"{t}/{rel}")
                 if rel in src_sha and h != src_sha[rel]:
                     bad.append(f"{t}: {rel} differs from {FAMILY_SOURCE[rel][0]} (the service has one source: change it there and regenerate)")
+        for rel, h in sorted(img.items()):     # the copies the image builds put in place (a sidecar's from its Dockerfile)
+            if module and os.path.basename(rel) == module:
+                seen[own_fam][module].setdefault(h, f"{t}/{rel} (files image)")
+            elif rel in FAMILY_SHARED and rel not in BY_NAME.get((fam, mode), ()):
+                seen[fam][f"{mode} {rel}"].setdefault(h, f"{t}/{rel} (files image)")
+                if rel in src_sha and h != src_sha[rel][:16]:
+                    bad.append(f"{t}: {rel} (from a files-only image) differs from {FAMILY_SOURCE[rel][0]} (the service has one source)")
     if bench not in MODULE:
         continue
     module = MODULE[bench]

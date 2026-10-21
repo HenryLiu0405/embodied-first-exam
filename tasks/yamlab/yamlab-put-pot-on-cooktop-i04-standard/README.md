@@ -9,7 +9,7 @@
 | Family / instance | `put_pot_on_cooktop` |
 | Oracle | `full` |
 | Agent time budget | 3600 s; tokens: protocol default (PROTOCOL §5) |
-| Base image | `ghcr.io/mll-lab-nu/efe-private:yamlab-0.1.0` |
+| Base image | `ghcr.io/mll-lab-nu/efe-private:yamlab-0.2.1` |
 
 ## Task
 Standard-mode twin of `yamlab-put-pot-on-cooktop-i04-privileged` (same frozen instance: YAMLab's objects `pot` = `Pot/pot_004` and `cooktop` = `Cooktop/cooktop_004` as placed in teleoperation
@@ -32,7 +32,7 @@ pose and the recorded teleoperation demonstration `putpot_004.hdf5 demo_4`, one 
 control step the service reports.
 
 ## Verification
-Graded by the live episode (owner 2026-10-17, board 0151): `success` = the live episode's success, judged by the sim
+Graded by the live episode (owner 2026-10-17): `success` = the live episode's success, judged by the sim
 service on the episode the agent ran, with no grading replay. YAMLab's success check (evaluation thresholds) is evaluated
 after every control step; the episode ends at the first step where every stage has latched. Before serving, the service
 checks the rebuilt scene against the frozen instance (`instance.json` `state_sha`, else every object pose and joint within
@@ -55,8 +55,8 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | GPU memory | 5 GB | 5 GB |
 
 - GPU: required, an RTX-class NVIDIA GPU (ray-tracing cores, for Isaac Sim / Omniverse RTX rendering); recommended: L40S 48GB / L4 24GB / RTX 4090 24GB.
-- Measured: GPU 3.8-4.0 GB per trial, anon memory 11.1-11.8 GB, CPU p90 5.8-8.7 cores over 12 trials, live sampler (docker stats + cgroup anon + nvidia-smi every 30 s, 13 AWS hosts + 4090-ws1, 10-10); vram_profile peaks 5.5-6.5 GB on 24 GB cards; board 0048: about 11 GB RAM and 8 CPUs per simulator; verifier 7.2 GB, mem_guard (docker memory per container, 4090-ws1, 10-02..10)
-- Limits in the agent phase (docs/protocol/README.md §2.10; `[metadata.resources.limits]`, shown to the agent in `instruction.md`; always measured and reported, and exceeding one fails the trial only when the run sets `RCB_LIMITS_ENFORCE=1`), the agent's container: no GPU, 8 GiB memory, 512 processes, 20 GiB of new files under `/app`, `/tmp`, `/root`; 60 s within 120 s. Expected peak of the whole trial: 16 GiB GPU memory, 27 GiB memory. Limits measured: GPU: 10.4 GiB on a 48 GB card, 6.5 on 24 GB (batch_eval_live vram_profile (per-trial GPU peaks by card, 10-03..10)) -> max(1.5 x peak, peak + 4), at least 16 for Isaac Sim; memory: agent container docker peak 1.5 GiB over 1 samples (mem_guard (docker memory incl. page cache, top-4 containers every 10 min, 4090-ws1, 10-02..10)) -> max(1.5 x peak, peak + 4, 8), at most the 24 GiB cap; whole trial: + the sim service's 19 GiB (docker peak 12.4 GiB, 1 samples); processes 512 and disk 20 GiB: design defaults, not yet measured.
+- Measured: GPU 3.8-4.0 GB per trial, anon memory 11.1-11.8 GB, CPU p90 5.8-8.7 cores over 12 trials, live sampler (docker stats + cgroup anon + nvidia-smi every 30 s, 13 cloud GPU hosts + an RTX 4090 workstation, 10-10); evaluation-pool GPU profile peaks 5.5-6.5 GB on 24 GB cards; about 11 GB RAM and 8 CPUs per simulator; verifier 7.2 GB, mem_guard (docker memory per container, an RTX 4090 workstation, 10-02..10)
+- Limits in the agent phase (docs/protocol/README.md §2.10; `[metadata.resources.limits]`, shown to the agent in `instruction.md`; always measured and reported, and exceeding one fails the trial only when the run sets `RCB_LIMITS_ENFORCE=1`), the agent's container: no GPU, 8 GiB memory, 512 processes, 20 GiB of new files under `/app`, `/tmp`, `/root`; 60 s within 120 s. Expected peak of the whole trial: 16 GiB GPU memory, 27 GiB memory. Limits measured: GPU: 10.4 GiB on a 48 GB card, 6.5 on 24 GB (the evaluation pool's GPU profile (per-trial GPU peaks by card, 10-03..10)) -> max(1.5 x peak, peak + 4), at least 16 for Isaac Sim; memory: agent container docker peak 1.5 GiB over 1 samples (mem_guard (docker memory incl. page cache, top-4 containers every 10 min, an RTX 4090 workstation, 10-02..10)) -> max(1.5 x peak, peak + 4, 8), at most the 24 GiB cap; whole trial: + the sim service's 19 GiB (docker peak 12.4 GiB, 1 samples); processes 512 and disk 20 GiB: design defaults, not yet measured.
 
 ## Details
 | | |
@@ -64,9 +64,9 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | Episode | one episode, no reset, no step budget: it ends at the first control step where every stage of YAMLab's success check has latched, when a task object falls off the table, when the agent's time is up, on a simulator error, or at the technical cap of 100,000 control steps (`spec.max_control_steps`, reason `step_guard`; 55.6 min of simulated time); the wall clock is the only budget |
 | Action space | `submit` chunks of `joint_position` (14: YAMLab's own action, streamed at the 30 Hz control rate with the agent's `dt`, a multiple of 1/30 s) or `ee_pose` (16: both tool frames, differential IK per row); `observe` frames or a watch window; `/kinematics` (FK / IK of both arms, stateless); binary RCB1 responses |
 | Cameras | `top` (static), `left_wrist`, `right_wrist` (on each arm's link_6), 640×480 RGB, z-depth on request |
-| Images | the `sim` sidecar runs efe-private:yamlab (BUILD_ONLY, `images/yamlab/BUILD_ONLY`); the agent container and the verifier run the shared client image with its pip pins (`scripts/eai_standard/client.env`) |
+| Images | the `sim` sidecar runs efe-private:yamlab (BUILD_ONLY, `images/yamlab/BUILD_ONLY`); the agent container and the verifier run the shared client image with its pip pins (`embodied_first_exam/standard/client.env`) |
 | Crash recovery | resume class `exact`: every control step journaled, a checkpoint with the state hash after every call; `restart: on-failure:6`, the service resumes the same episode (docs/protocol/standard_mode.md §13) |
-| Generator | `scripts/yamlab/mk_tasks.py` (`scripts/yamlab/instances.json`, `frozen/`, `template/standard/`, `shared/`, `scripts/eai_standard/`); tasks/yamlab/README.md |
+| Benchmark notes | tasks/yamlab/README.md |
 
 ### Change Log
 - 2026-10-10: grading robustness and time limits; the scene, the frozen instance and the pass rule
@@ -78,9 +78,9 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
   moves (some ended the episode with a simulator error); `/spec` states the 100,000-step cap (`max_control_steps`). The
   replay video of an episode longer than 18,000 control steps is a time lapse (at most 9,000 frames). A trial
   recorded before this date with reward 0 and one of these conditions was an infrastructure failure.
-- 2026-10-10 (review round 2, board 0067): the client only (`environment/rcb_client.py`). `Robot()` waits up to 3600 s for the service (was 600 s) and prints its progress to stderr once a minute, so the first `Robot()` outlasts the simulator's start (629 s measured here on a loaded host: the first `Robot()` could raise "sim service unavailable", and the instruction said to call it again); `cameras="name"` (a string) is one camera, no longer its characters. The service, the collect hook, the grader, the scene and the pass rule are unchanged.
-- 2026-10-10 (review round 3, board 0067): the shared service layer and the client only (`environment/sim/rcb_limited.py`, `environment/rcb_client.py`). A camera named more than once in `cameras` is rendered and returned once (N copies of one name made the service build N x N images within the frame budget, which could exhaust its memory). A service that has given up on the episode (it could not start it, or could not resume it after its crashes) answers every request with 409 and the reason, and `Robot()` / `wait_ready()` raise `EpisodeOver` at once; before, nothing answered and they waited out their timeout (up to an hour). The adapter, the collect hook, the grader, the scene and the pass rule are unchanged.
-- 2026-10-10 (owner decision, board 0072): the frozen instance file no longer names the recording it was made from
+- 2026-10-10 (review round 2): the client only (`environment/rcb_client.py`). `Robot()` waits up to 3600 s for the service (was 600 s) and prints its progress to stderr once a minute, so the first `Robot()` outlasts the simulator's start (629 s measured here on a loaded host: the first `Robot()` could raise "sim service unavailable", and the instruction said to call it again); `cameras="name"` (a string) is one camera, no longer its characters. The service, the collect hook, the grader, the scene and the pass rule are unchanged.
+- 2026-10-10 (review round 3): the shared service layer and the client only (`environment/sim/rcb_limited.py`, `environment/rcb_client.py`). A camera named more than once in `cameras` is rendered and returned once (N copies of one name made the service build N x N images within the frame budget, which could exhaust its memory). A service that has given up on the episode (it could not start it, or could not resume it after its crashes) answers every request with 409 and the reason, and `Robot()` / `wait_ready()` raise `EpisodeOver` at once; before, nothing answered and they waited out their timeout (up to an hour). The adapter, the collect hook, the grader, the scene and the pass rule are unchanged.
+- 2026-10-10 (owner decision): the frozen instance file no longer names the recording it was made from
   (`instance.json` had a `source` entry with the dataset, the file and the demonstration index, and the tooling's usage
   text named such a file; the reference solution replays that demonstration). Nothing reads the entry: the scene, its
   state hash, the tooling's behaviour and the pass rule are unchanged, so the task keeps its name.

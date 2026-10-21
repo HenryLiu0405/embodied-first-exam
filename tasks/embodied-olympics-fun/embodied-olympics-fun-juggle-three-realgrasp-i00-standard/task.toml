@@ -27,14 +27,14 @@ robot = "unitree-g1"
 family = "juggle_three_realgrasp"
 category = "throwing-catching-striking"
 mode = "standard"
-dynamics = "dynamic"              # scene dynamics (docs/protocol/README.md §2.14): scripts/task_dynamics.toml
+dynamics = "dynamic"              # scene dynamics (docs/protocol/README.md §2.14): the task's own declaration
 network = "open"                 # the agent's egress (docs/protocol/README.md §2): open, the author's choice
 protocol = "eai-standard/2.1"
 instance_seed = 0
 reset_budget = 50
 expert_time_estimate_hours = 14.0
 oracle = "none"
-oracle_evidence = "no reference solution; the referee is tested by scripts/embodied-olympics/tests/test_juggle_three_realgrasp.py: positive: throws injected (jaws opened by command, ball put on an arc to the other jaws), all 10 catches real (the ball falls between the open jaws pointing up; the jaws close at 5 cm and the pads clamp for 0.05 s). Negatives: back into / clamped by its own gripper, low pass, never closes, closes too early (ball on the tips), waiting ball pushed, onto the head, held ball pressed on the upper arm, weak clamp slips (jaws 33 deg down: 3.3 N holds, ~1.5 N falls), a fall; human review in the pull request that adds the benchmark (PROTOCOL §2.7)"
+oracle_evidence = "no reference solution; the referee is tested: positive: throws injected (jaws opened by command, ball put on an arc to the other jaws), all 10 catches real (the ball falls between the open jaws pointing up; the jaws close at 5 cm and the pads clamp for 0.05 s). Negatives: back into / clamped by its own gripper, low pass, never closes, closes too early (ball on the tips), waiting ball pushed, onto the head, held ball pressed on the upper arm, weak clamp slips (jaws 33 deg down: 3.3 N holds, ~1.5 N falls), a fall; human review in the pull request that adds the benchmark (PROTOCOL §2.7)"
 
 [metadata.resources]
 # minimum compute to run this task (docs/protocol/README.md §2.9)
@@ -46,7 +46,7 @@ gpu_class = "none"
 verifier_min_cpus = 2.0
 verifier_min_memory_gb = 3.0
 verifier_min_gpu_memory_gb = 0.0
-measured = "author estimate (4090-ws1, 2026-10-11): CPU-only; the sim sidecar steps and renders on one or two cores (under 1 GB), the agent's container holds the harness and the client"
+measured = "author estimate (an RTX 4090 workstation, 2026-10-11): CPU-only; the sim sidecar steps and renders on one or two cores (under 1 GB), the agent's container holds the harness and the client"
 
 [metadata.resources.limits]
 # agent-phase limits in GiB (docs/protocol/README.md §2.10); scope: trial = every container, agent = the agent's container;
@@ -95,7 +95,7 @@ command = "kill -9 -1 2>/dev/null; exit 0"
 timeout_sec = 30
 
 # Then the episode ends: SIGUSR1 to the service (re-sent every 30 s, in case it was restarting), which grades the live
-# episode (no grading replay, board 0151). The loops run on the clock, inside timeout_sec: the verdict ("finalized":
+# episode (no grading replay). The loops run on the clock, inside timeout_sec: the verdict ("finalized":
 # true, written before any video is rendered) may take until 840 s (the end waits through a crash-recovery resume);
 # then the hook waits for the video, one render pass from the trajectory ("video_pending"), until 870 s -- a video that
 # is not ready by then is lost, the verdict is not.

@@ -7,7 +7,7 @@
 | Twin | `embodied-olympics-fun-paddle-bounce-realgrasp-i00-standard` |
 | Simulator / robot | `mujoco` / `unitree-g1` |
 | Family / instance | `paddle_bounce_realgrasp` / seed 0 |
-| Oracle | `full` — paddle-bounce's solution ported to the free paddle in the Dex1-1 (IK reads the paddle's pose in the jaws): 20 bounces at 15.4 s, 17/18 perturbations; two-jaw breaks ≤2 ms; 0.6 N clamp slides 54 mm, 0.3 N drops Measured (make_oracles.py): success after 15.38 s of the 20 s limit, live and in a fresh replay, ending in the same state. |
+| Oracle | `full` — paddle-bounce's solution ported to the free paddle in the Dex1-1 (IK reads the paddle's pose in the jaws): 20 bounces at 15.4 s, 17/18 perturbations; two-jaw breaks ≤2 ms; 0.6 N clamp slides 54 mm, 0.3 N drops Measured: success after 15.38 s of the 20 s limit, live and in a fresh replay, ending in the same state. |
 | Agent time budget | 7200 s; tokens: protocol default (PROTOCOL §5) |
 | Base image | `ghcr.io/mll-lab-nu/efe:embodied-olympics-fun-0.2.1` |
 
@@ -18,7 +18,7 @@ Keep the table tennis ball that is dropped in front of you bouncing on the paddl
 Every bounce needs an upward hit of the right strength at the right instant, with the blade level and under a 40 mm ball: a tilt of a degree sends the ball off the 15 cm blade within a few bounces, and the arm that holds the blade gives way a little at every hit. The paddle sits in a two-finger gripper, so the blade is where the jaws hold it, not where the arm was told to put it, and it has to go right twenty times in a row.
 
 ## Reference solution
-`solution/oracle.py` drives the robot through the task's own tooling, closed loop on the privileged state, and writes the trajectory (`solution/solve.sh`). paddle-bounce's solution ported to the free paddle in the Dex1-1 (IK reads the paddle's pose in the jaws): 20 bounces at 15.4 s, 17/18 perturbations; two-jaw breaks ≤2 ms; 0.6 N clamp slides 54 mm, 0.3 N drops Measured (make_oracles.py): success after 15.38 s of the 20 s limit, live and in a fresh replay, ending in the same state.
+`solution/oracle.py` drives the robot through the task's own tooling, closed loop on the privileged state, and writes the trajectory (`solution/solve.sh`). paddle-bounce's solution ported to the free paddle in the Dex1-1 (IK reads the paddle's pose in the jaws): 20 bounces at 15.4 s, 17/18 perturbations; two-jaw breaks ≤2 ms; 0.6 N clamp slides 54 mm, 0.3 N drops Measured: success after 15.38 s of the 20 s limit, live and in a fresh replay, ending in the same state.
 
 ## Verification
 `/tests/grade.py` replays `/app/output/trajectory.npz` from the frozen start in two fresh processes (`rcb_rfo.py replay`:
@@ -35,7 +35,7 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | GPU memory | 0 GB | 0 GB |
 
 - GPU: not needed.
-- Measured: author estimate (4090-ws1, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
+- Measured: author estimate (an RTX 4090 workstation, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
 - Limits in the agent phase (docs/protocol/README.md §2.10; `[metadata.resources.limits]`, shown to the agent in `instruction.md`; always measured and reported, and exceeding one fails the trial only when the run sets `RCB_LIMITS_ENFORCE=1`), every container of the trial: no GPU, 13 GiB memory, 512 processes, 20 GiB of new files under `/app`, `/tmp`, `/root`; 60 s within 120 s. Expected peak of the whole trial: 0 GiB GPU memory, 13 GiB memory. Limits measured: author estimate: no trials yet; memory under the 16 GiB cap by the margin the monitor needs (an agent may run several worlds at once or train a controller); disk 20 GiB for downloaded tools and controllers; processes 512: design default.
 
 ## Details

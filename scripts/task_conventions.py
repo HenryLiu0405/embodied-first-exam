@@ -97,28 +97,22 @@ BENCHMARKS = [  # (directory prefix, label)
 ]
 # Modes (PROTOCOL §3, owner 2026-10-14): a benchmark ships any subset of the modes. A standard or standard-realtime
 # task without a privileged twin says why in its README's Twin row ("— (none: ...)"), the task's own declaration:
-# no_twin_reason() reads it back, so no list of such tasks is kept here (board 0124).
-# Embodied Olympics' exported tasks (PROTOCOL v1 §4c; ci_checks/benchmarks/embodied-olympics-match/exported.toml) have a cutoff note of their own
-# (CUTOFF_NOTE_TASK below):
-RO_EXPORTED_TASKS = ("embodied-olympics-match-badminton-match-i01-standard-realtime",
-                     "embodied-olympics-match-badminton-duelrl-i01-standard-realtime",
-                     "embodied-olympics-match-badminton-match-i02-standard-realtime",
-                     "embodied-olympics-match-badminton-match-i04-standard-realtime",
-                     "embodied-olympics-match-fencing-bout-i01-standard",
-                     "embodied-olympics-match-fencing-bout-i02-standard",
-                     "embodied-olympics-match-foosball-match-i01-standard-realtime",
-                     "embodied-olympics-match-soccer-match-i00-standard-realtime",
-                     "embodied-olympics-match-soccer-jointcpu-i01-standard-realtime",
-                     "embodied-olympics-match-soccer-jointgpu-i01-standard-realtime",
-                     "embodied-olympics-match-soccerssl-match-i00-standard-realtime",
-                     "embodied-olympics-match-soccerssl-match-i01-standard-realtime",
-                     "embodied-olympics-match-tabletennis-duelrl-i01-standard-realtime",
-                     "embodied-olympics-match-badminton-matchlow-i01-standard-realtime",
-                     "embodied-olympics-match-tabletennis-matchlow-i01-standard-realtime",
-                     "embodied-olympics-match-tabletennis-match-i01-standard-realtime",
-                     "embodied-olympics-match-tabletennis-match-i02-standard-realtime",
-                     "embodied-olympics-match-tabletennis-match-i03-standard-realtime",
-                     "embodied-olympics-match-tabletennis-match-i04-standard-realtime")
+# no_twin_reason() reads it back, so no list of such tasks is kept here.
+# Embodied Olympics' exported tasks (PROTOCOL §4c) have a cutoff note of their own (CUTOFF_NOTE_TASK below): the
+# directories its manifest ci_checks/benchmarks/embodied-olympics-match/exported.toml lists in a mode that serves its own
+# protocol (its [protocols] table: their session talks to its own service). The privileged twins listed there
+# (`kind = "fullsim-policy"`) run no service: they keep their mode's note.
+RO_EXPORTED_FILE = Path(__file__).resolve().parents[1] / "ci_checks/benchmarks/embodied-olympics-match/exported.toml"
+
+
+def _ro_exported_tasks() -> tuple[str, ...]:
+    d = tomllib.loads(RO_EXPORTED_FILE.read_text())
+    own = d.get("protocols", {})              # mode -> the protocol its own service serves
+    mode = lambda n: max((m for m in (*own, "privileged") if n.endswith("-" + m)), key=len, default=None)
+    return tuple(t["name"] for t in d.get("tasks", []) if mode(t["name"]) in own)
+
+
+RO_EXPORTED_TASKS = _ro_exported_tasks()
 # PROTOCOL §2.16 (owner, 2026-10-14): THE registry of modes. A mode's name is the whole suffix of its task directories
 # (`<base>-<mode>`) and its `[metadata] mode`; everything that parses or branches on a mode reads this table (mode_of,
 # base_of, the twins' equal cutoffs, the limits' scope, the checks under ci_checks/, which get it once per run through
@@ -159,7 +153,9 @@ RESOURCES_FILE = Path(__file__).resolve().parent / "task_resources.toml"
 # service's `RCB_SLOWDOWN` default (environment/docker-compose.yaml); its reset budget is the `RCB_RESET_BUDGET` default
 # there (same rules: ci_checks/check-realtime.py)
 SLOWDOWN_RE = re.compile(r'RCB_SLOWDOWN:\s*"?\$\{RCB_SLOWDOWN:-([0-9.]+)\}"?')
-RESET_RE = re.compile(r'RCB_RESET_BUDGET:\s*"?\$\{RCB_RESET_BUDGET:-([0-9]+)\}"?')
+# RCB_RESET_BUDGET's default: overridable (`"${RCB_RESET_BUDGET:-N}"`) or fixed (`"N"`); the one rule for the README,
+# the recorded configuration (reset_budget_of) and ci_checks/check-realtime.py
+RESET_DECL_RE = re.compile(r'^\s*RCB_RESET_BUDGET:\s*"?(?:\$\{RCB_RESET_BUDGET:-([0-9]+)\}|([0-9]+))"?\s*(?:#.*)?$', re.M)
 # a task a benchmark exports with its own service (PROTOCOL §4c) sets S its own way: Embodied Olympics `RO_SLOWDOWN: "10"`
 OWN_SLOWDOWN_RE = re.compile(r'^\s*RO_SLOWDOWN:\s*"?([0-9.]+)"?\s*$', re.M)
 RESOURCE_KEYS = {  # key -> type; recommended_gpu is optional when gpu_required is false
@@ -178,7 +174,7 @@ ENFORCE_ENV = "RCB_LIMITS_ENFORCE"   # §2.10: run-time switch (compose default 
 EMERGENCY_GPU_FACTOR = 1.5           # §2.10: host protection in enforced runs (the same value: rcb_monitor/monitor.py)
 LIMIT_SCOPES = {m: d["limit_scope"] for m, d in MODE_REGISTRY.items()}   # §2.10: who the limits bind
 LIMITS_HEADING = "## Resource limits"
-# PROTOCOL §2.11 (owner, 2026-10-11, board 0072; relaxed 2026-10-14, board 0107 E4): an honour rule, the same words in
+# PROTOCOL §2.11 (owner, 2026-10-11; relaxed 2026-10-14): an honour rule, the same words in
 # every task's instruction.md, just before `## Resource limits` (generator-owned: edit it here, never in a task;
 # ci_checks/check-resources.py compares). Installing packages and reading whatever is installed in the container (the
 # simulator's and the benchmark's own source included) are fine; searching the web for, or downloading, a ready-made
@@ -190,7 +186,7 @@ EXTERNAL_TEXT = (
     "for, or download, a ready-made solution to it, such as published or reference solutions, recorded demonstrations, "
     "or policies trained for it. This is an honour rule; trials are reviewed. The network reaches your model's API and "
     "the package registries (PyPI, Debian / Ubuntu archives) only.")
-# Open network (PROTOCOL §2, Appendix H.6; owner 2026-10-14, board 0124): the task author's choice, declared as
+# Open network (PROTOCOL §2, Appendix H.6; owner 2026-10-14): the task author's choice, declared as
 # `[metadata] network = "open"` in task.toml. Such a task carries its own `## External material` paragraph (the author
 # says what may be used); normalize keeps it, and writes EXTERNAL_TEXT_OPEN where it has none.
 EXTERNAL_TEXT_OPEN = (
@@ -214,7 +210,7 @@ CUTOFF_RE = (r"You have (\d+) seconds to complete this task\. Do not cheat by us
 CUTOFF_HEADING = "## Time limit"
 CUTOFF_REF = "the time limit (`## Time limit`)"    # how a benchmark's own text names the limit: never a duration
 _CUTOFF_CLOSE = " Installing packages is not cheating (`## External material` above)."
-# owner 2026-10-13 (board 0086): agents without a clock in their tool output guessed their elapsed time 2-7 times too
+# owner 2026-10-13: agents without a clock in their tool output guessed their elapsed time 2-7 times too
 # high and stopped early; every agent gets the same way to know it (a command, not a guess).
 # #231 (10-15): a sentence asking for `date` was not enough (agents still guessed); the resource
 # monitor now shows the clock itself (images/monitor/rcb_monitor/monitor.py clock(): from the trial environment's start, so it
@@ -257,7 +253,7 @@ CUTOFF_NOTE_OWN[("roboEngineer", "standard")] = (
     "is not graded. The service's own deadline counts the same limit from your first request to it, so it never runs "
     "out before your time does." + _CUTOFF_CLOCK + _CUTOFF_WAITS + _CUTOFF_CLOSE)
 # Embodied Olympics' exported tasks (PROTOCOL §4c): their own service reports no `time_left_s` and does not read
-# RCB_WALL_CLOCK_S (its clocks are the game's own), and a skill task has no episode (board 0121 m4)
+# RCB_WALL_CLOCK_S (its clocks are the game's own), and a skill task has no episode
 CUTOFF_NOTE_TASK = {n: (
     "This is wall-clock time from the start of your session; the time you wait for the simulator service counts. When "
     "it is up you are stopped without warning and graded on what stands at that moment, as the sections above say. The "
@@ -910,7 +906,7 @@ def _shared_sources() -> set[bytes]:
 
 def _is_layer_copy(f: Path) -> bool:
     """A copy of some version of embodied_first_exam/standard/rcb_limited.py or v2_4/rcb_limited.py (its PROTOCOL line and COMPAT
-    list): board 0151 changed the layer, and the tasks of each benchmark move onto the new bytes only when it regenerates."""
+    list): the layer changed on 2026-10-17, and the tasks of each benchmark move onto the new bytes only when it regenerates."""
     t = read_text(f) or ""
     return bool(re.search(r'(?m)^PROTOCOL = "eai-standard/2\.\d"', t)) and bool(re.search(r"(?m)^COMPAT = \[", t))
 
@@ -934,6 +930,30 @@ def normalize_text_files(task: Path) -> None:
         if f.name == "grade.py":
             t = normalize_grader(t)
         write_if_changed(f, t)
+
+
+# A base image a task builds itself when it cannot pull it: the task's Dockerfile (environment/, tests/, or a sidecar's
+# under environment/) starts with the image's recipe between `# >>> images/<name>/Dockerfile` and
+# `# <<< images/<name>/Dockerfile` (its first FROM names the stage, `... AS <name>-base`, and later stages are
+# `FROM <name>-base`), and the compose service's `build.cache_from` names the prebuilt image. normalize writes the current
+# images/<name>/Dockerfile into the block byte for byte: the build's cache keys are then the prebuilt image's, so a
+# runner that can pull it takes its layers and any other runner builds the same recipe from public sources.
+BASE_STAGE_RE = re.compile(r"(?ms)^# >>> (images/[A-Za-z0-9_.-]+/Dockerfile)\n.*?^# <<< \1\n")
+
+
+def normalize_base_stages(task: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    for df in sorted(p for sub in ("environment", "tests") if (task / sub).is_dir() for p in (task / sub).rglob("Dockerfile")):
+        s = read_text(df)
+        if s is None or "# >>> images/" not in s:
+            continue
+        def block(m: "re.Match[str]") -> str:
+            src = root / m.group(1)
+            if not src.is_file():
+                raise ValueError(f"{df}: base stage {m.group(1)}: no such file")
+            body = src.read_text()
+            return f"# >>> {m.group(1)}\n{body}{'' if body.endswith(chr(10)) else chr(10)}# <<< {m.group(1)}\n"
+        write_if_changed(df, BASE_STAGE_RE.sub(block, s))
 
 
 def normalize_grader(t: str) -> str:
@@ -1017,11 +1037,18 @@ def parse_readme(s: str) -> tuple[str, list[tuple[str, str]], list[tuple[str, st
 
 
 def image_of(task: Path) -> str:
+    c = read_text(task / "environment/docker-compose.yaml") or ""
+    m = re.search(r"""^\s*cache_from:\s*(?:\[\s*|\n\s*-\s*)["']?([^"',\]\s]+)""", c, re.M)
+    if m:                       # the prebuilt image of a base stage the task builds when it cannot pull it (normalize_base_stages)
+        return m.group(1)
     if mode_of(task) in SIDECAR_MODES:
-        c = read_text(task / "environment/docker-compose.yaml") or ""
         imgs = [i for i in re.findall(r"^\s*image:\s*(\S+)", c, re.M) if not re.search(r"/(?:eai|efe)-monitor[:@]|/efe:monitor-", i)]   # not the monitor's
         if imgs:
             return imgs[0]
+        for sub in ("sim", "scorer"):   # a sidecar built from its own directory: the base image of its Dockerfile
+            m = re.search(r"^FROM\s+(\S+)", read_text(task / "environment" / sub / "Dockerfile") or "", re.M)
+            if m:
+                return m.group(1)
     d = read_text(task / "environment/Dockerfile") or ""
     m = re.search(r"^FROM\s+(\S+)", d, re.M)
     return m.group(1) if m else ""
@@ -1236,10 +1263,10 @@ def realtime_of(task: Path) -> tuple[float, int | None] | None:
     if mode_of(task) != "standard-realtime":
         return None
     c = read_text(task / "environment/docker-compose.yaml") or ""
-    m, r = SLOWDOWN_RE.search(c) or OWN_SLOWDOWN_RE.search(c), RESET_RE.search(c)
+    m, r = SLOWDOWN_RE.search(c) or OWN_SLOWDOWN_RE.search(c), RESET_DECL_RE.search(c)
     if not m:
         return None
-    return float(m.group(1)), (int(r.group(1)) if r else None)
+    return float(m.group(1)), (int(r.group(1) or r.group(2)) if r else None)
 
 
 def slowdown_var(task: Path) -> str:
@@ -1271,12 +1298,11 @@ def normalize_slowdown(task: Path) -> None:
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# PROTOCOL v2.0 §2 (owner, 2026-10-14, board 0124): the settings a task declares, and the effective configuration of a
+# PROTOCOL v2.0 §2 (owner, 2026-10-14): the settings a task declares, and the effective configuration of a
 # trial, recorded with every result so that results are ranked only within one comparable configuration (docs/protocol/running.md
 # "Results"). Standard library only: scripts/write_task_results.py, scripts/dataset_manifest.py and the scheduler's run
-# policy (batch_eval_live) read these.
+# policy (the evaluation pool's) read these.
 PROTOCOL_VERSION = "2.0"                         # docs/protocol/README.md
-RESET_DECL_RE = re.compile(r'^\s*RCB_RESET_BUDGET:\s*"?(?:\$\{RCB_RESET_BUDGET:-([0-9]+)\}|([0-9]+))"?\s*(?:#.*)?$', re.M)
 
 
 def metadata_of(task: Path) -> dict:
@@ -1396,6 +1422,83 @@ README_QUICK = re.compile(r"(<!-- quick-start: generated by `python3 scripts/tas
                           r"(.*?)(<!-- /quick-start -->)", re.S)
 
 
+# The README's "Before you run" (readme_quick_start): per benchmark, what a user does by hand once and what its first run
+# does (an image it builds itself: time, free disk, the licences the build accepts), from that benchmark's README, whose
+# heading named here must exist (`readme --check`); "<file>#<heading>": a heading in that file (relative to the
+# repository). A benchmark without a row needs nothing beyond the host requirements.
+ISAAC = "accepts NVIDIA's Isaac Sim terms"
+BEFORE_YOU_RUN = {
+    "AM-Bench": ("Before you run", "", f"Builds its image ({ISAAC}): about 25 min, 60 GB free disk."),
+    "BEHAVIOR-1K": ("Before you run",
+                    "Download the BEHAVIOR dataset (its downloader asks you to accept the BEHAVIOR Data Bundle licence; "
+                    "about 32 GB, 40 GB on disk) and export `RCB_BEHAVIOR_DATA`.",
+                    f"Builds its image ({ISAAC}): about 20 min, 30 GB free disk."),
+    "iSpatialGym": ("Before you run", "The BEHAVIOR-1K dataset, `RCB_BEHAVIOR_DATA` (the same directory).",
+                    f"Builds its image ({ISAAC}): about 20 min, 31 GB free disk."),
+    "LIBERO-MAX": ("Task definition", "A CPU with AVX-512 (Intel Ice Lake or newer Xeon, AMD Zen 4 or newer).", ""),
+    "ManiGuard": ("Before you run",
+                  "Prepare the data root `RCB_MANIGUARD_DATA` (3.4 GB; its key asks you to accept the BEHAVIOR Data "
+                  "Bundle licence). NVIDIA driver 580.x: newer drivers crashed at start.",
+                  f"Builds its image ({ISAAC}): about 20 min, 50 GB free disk."),
+    "RoboARC": ("images/roboarc/README.md#Host",
+                "NVIDIA driver 580 or newer, one GPU per container; knot_untying and rope_threading need a 24 GB GPU of "
+                "their own.", ""),
+    "RoboDojo": ("Before you run", "",
+                 f"Builds its image with 41 GB of assets ({ISAAC} and cuRobo's): 30-90 min, 150 GB free disk."),
+    "roboEngineer": ("Getting the images",
+                     "Build the evaluator images with its scripts; the eight Neural Fly tasks also need the force fit made "
+                     "locally (`fetch_assets.sh --fit-fly`).", ""),
+    "RoboLab": ("Before you run", "", f"Builds its image ({ISAAC}): 20-60 min, 60 GB free disk."),
+    "RoboWits": ("Getting the images",
+                 "24 of its 30 tasks need BlenderKit models in `RCB_ROBOWITS_BLENDERKIT`: from the gated Hugging Face "
+                 "dataset (accept its terms, `hf auth login`) or with your own BlenderKit Full Plan key.", ""),
+    "VLABench": ("What you need before running", "", "Builds its image (CPU only): 5-20 min, 40 GB free disk."),
+    "YAMLab": ("Before you run", "", f"Builds its image ({ISAAC}): about 25 min, 60 GB free disk."),
+}
+# Benchmarks whose README asks for RT cores although their tasks declare gpu_class "any" (RoboARC: its renderer Nyx).
+RT_CORES_BY_README = {"RoboARC"}
+
+
+def before_you_run_link(lab: str) -> tuple[str, str]:
+    """A BEFORE_YOU_RUN row's file (relative to the repository) and heading."""
+    head = BEFORE_YOU_RUN[lab][0]
+    f, _, h = head.rpartition("#")
+    return (f, h) if f else (f"tasks/{BENCHMARK_DIRS[lab]}/README.md", head)
+
+
+def gh_anchor(heading: str) -> str:
+    """GitHub's anchor of a Markdown heading: lower case, punctuation dropped, spaces as hyphens."""
+    return re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+
+
+def check_before_you_run(tasks_dir: Path | None = None) -> list[str]:
+    """What is wrong with BEFORE_YOU_RUN: a label that is not a benchmark, or a heading its README does not have."""
+    tasks_dir = tasks_dir or TASKS_DIR
+    bad = []
+    for lab in BEFORE_YOU_RUN:
+        if lab not in BENCHMARK_DIRS:
+            bad.append(f"{lab}: not a benchmark label")
+            continue
+        f, head = before_you_run_link(lab)
+        heads = {gh_anchor(m) for m in re.findall(r"^#+ (.+)$", read_text(tasks_dir.parent / f) or "", re.M)}
+        if gh_anchor(head) not in heads:
+            bad.append(f"{lab}: {f} has no heading {head!r}")
+    return bad
+
+
+def gpu_classes(tasks_dir: Path | None = None) -> dict[str, list[str]]:
+    """The benchmarks by the GPUs their tasks declare ([metadata.resources] gpu_required / gpu_class): "rtx" (some task
+    needs an RTX-class GPU), "any" (every task needs some NVIDIA GPU), "some" (some tasks do), "none" (no task does)."""
+    need: dict[str, set] = {}
+    for t in iter_tasks(tasks_dir or TASKS_DIR):
+        r = metadata_of(t).get("resources", {})
+        need.setdefault(bench_of(t), set()).add(r.get("gpu_class", "any") if r.get("gpu_required") else "none")
+    out: dict[str, list[str]] = {"rtx": [], "any": [], "some": [], "none": []}
+    for lab, n in sorted(need.items(), key=lambda kv: kv[0].lower()):
+        out["rtx" if "rtx" in n or lab in RT_CORES_BY_README else "none" if n == {"none"} else "some" if "none" in n else "any"].append(lab)
+    return out
+
+
 def readme_quick_start(tasks_dir: Path | None = None) -> str:
     """The README's header counts and quick start (core_tasks(), iter_tasks()): one command per line, its comment on
     the line above, so no line needs a horizontal scroll on GitHub."""
@@ -1411,11 +1514,31 @@ def readme_quick_start(tasks_dir: Path | None = None) -> str:
 
     def block(*lines: str) -> str:
         return "```bash\n" + "\n".join(lines) + "\n```\n"
+    g = gpu_classes(tasks_dir)
+    rows = []
+    for lab, (_, hand, first) in sorted(BEFORE_YOU_RUN.items(), key=lambda kv: kv[0].lower()):
+        f, head = before_you_run_link(lab)
+        rows.append(f"| [{lab}]({f}#{gh_anchor(head)}) | {hand or '-'} | {first or '-'} |")
     return "\n".join([
+        "### Before you run", "",
+        "- **Host:** Linux x86_64 with git, [uv](https://docs.astral.sh/uv/) (it fetches a Python 3.12-3.14 for "
+        "Harbor if needed) and Docker Engine with Compose v2 and BuildKit (the `buildx` plugin). Without Docker, e.g. on a Slurm cluster: rootless podman "
+        "with `-e podman` ([docs/protocol/running.md](docs/protocol/running.md#without-docker-rootless-podman-eg-a-slurm-cluster)).",
+        "- **GPU:** the NVIDIA driver and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/"
+        "container-toolkit/latest/install-guide.html) for every task that uses a GPU. An RTX-class GPU (with RT cores; "
+        f"not A100 or H100): {', '.join(g['rtx'])}. Any NVIDIA GPU: {', '.join(g['any'])}. Some tasks: "
+        f"{', '.join(g['some'])}. No GPU: {', '.join(g['none'])}.",
+        "- **Disk:** a benchmark's public images take 1-30 GB, pulled on its first run; a benchmark that builds its "
+        "image needs the free disk its row below states.",
+        "- **API keys** for the agent's model in `.env` (step 1), or a subscription (step 3).", "",
+        "These benchmarks need a step by hand, or build their image on their first run because it may not be "
+        "redistributed. That build accepts the licences of what it installs on your behalf: read them in the linked "
+        "section. Organization members logged in to ghcr.io pull the prebuilt layers instead (on podman, after "
+        "`podman login ghcr.io`, `harbor run -e podman` pulls the prebuilt image and uses it in place of the recipe; "
+        "[docs/protocol/running.md](docs/protocol/running.md#without-docker-rootless-podman-eg-a-slurm-cluster)).", "",
+        "| Benchmark | By hand, once | First run |", "|---|---|---|", *rows, "",
         "### 1. Install", "",
-        block("# needs git, uv (https://docs.astral.sh/uv/) and Docker with Compose; GPU tasks also need an NVIDIA GPU",
-              "# and the NVIDIA Container Toolkit",
-              "# clone with the submodules; install Harbor 0.23.0 with this repository's flags",
+        block("# clone with the submodules; install Harbor 0.23.0 with this repository's flags",
               "git clone --recurse-submodules https://github.com/mll-lab-nu/embodied-first-exam.git",
               "cd embodied-first-exam",
               "uv tool install --force -e . --with-executables-from harbor",
@@ -1433,9 +1556,6 @@ def readme_quick_start(tasks_dir: Path | None = None) -> str:
         block(f"# one benchmark, here RoboARC ({arc} task dirs)", f"{d}@all -p tasks/roboarc {m}"),
         block("# one task (-y skips Harbor's confirmation prompt, e.g. in a script)",
               f"{d}@all -p tasks/<benchmark>/<task> -a oracle"),
-        "Some benchmarks' images are not public: build them first as the benchmark's README in `tasks/<benchmark>/` "
-        "describes (e.g. [tasks/ambench](tasks/ambench)). No Docker, e.g. on a Slurm cluster: rootless podman with "
-        "`-e podman` ([docs/protocol/running.md](docs/protocol/running.md#without-docker-rootless-podman-eg-a-slurm-cluster)).", "",
         "### 3. Or use a subscription instead of an API key", "",
         block("# ChatGPT: log in once", "codex login", f"CODEX_FORCE_AUTH_JSON=1 {d} {m}"),
         block("# Claude: put the token it prints in .env as CLAUDE_CODE_OAUTH_TOKEN", "claude setup-token",
@@ -1539,6 +1659,7 @@ def normalize(task: Path) -> None:
     normalize_main_cap(task)
     normalize_verifier_network(task)
     normalize_text_files(task)
+    normalize_base_stages(task)
     normalize_instruction(task)
     normalize_test_sh(task)
     write_if_changed(task / "README.md", render_readme(task))
@@ -1606,6 +1727,8 @@ def main(argv: list[str]) -> int:
         want_q = readme_quick_start()
         if "--write" in argv:
             README_FILE.write_text(text[:q.start(2)] + want_q + text[q.end(2):], encoding="utf-8"); return 0
+        for b in check_before_you_run():
+            print(f"FAIL README.md Before you run: {b}"); return 1
         if q.group(2) != want_q:
             print("FAIL README.md: the quick start is stale (python3 scripts/task_conventions.py readme --write)"); return 1
         print("ok README.md quick start"); return 0

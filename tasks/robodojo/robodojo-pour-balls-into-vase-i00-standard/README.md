@@ -9,7 +9,7 @@
 | Family / instance | `pour_balls_into_vase` |
 | Oracle | `none` — no positive example yet; no reference solution (RoboDojo releases no expert, and its training demonstrations carry no initial state); reported separately until one exists; human review in PR #142 |
 | Agent time budget | 3600 s; tokens: protocol default (PROTOCOL §5) |
-| Base image | `ghcr.io/mll-lab-nu/efe-private:robodojo-0.1.0` |
+| Base image | `ghcr.io/mll-lab-nu/efe-private:robodojo-0.2.1` |
 
 ## Task
 Standard-mode twin of `robodojo-pour-balls-into-vase-i00-privileged` (same frozen layout, RoboDojo's `arx_x5/0/pour_balls_into_vase_0.json`). Pick up the cup containing 7 balls, pour all the balls into the vase, put the cup back upright and bring the arms home. (RoboDojo's `pour_balls_into_vase`). The agent drives the
@@ -44,7 +44,7 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | GPU memory | 11 GB | 11 GB |
 
 - GPU: required, an RTX-class NVIDIA GPU (ray-tracing cores, for Isaac Sim / Omniverse RTX rendering); recommended: L40S 48GB / L4 24GB / RTX 4090 24GB.
-- Measured: heaviest scene (pour_liquid_into_cup_random), a client driving 12 joint_position chunks, then the collect hook's two fresh-process replays (the first filmed): sim sidecar docker peak 16.0 GiB (anon 14.9), GPU 9.5 GiB, up to 16 cores while Isaac starts; agent container under 0.1 GiB; per-container sampler (docker stats, cgroup anon, nvidia-smi every 10 s), RTX 4090, 10-10 (the verifier phase then replayed as the privileged verifier does: docker peak 15.7 GiB, GPU 9.6 GiB); since 2026-10-17 (board 0151) the collect hook replays nothing: after the service exits it only encodes the live video on the CPU, so the sidecar's peak is the live service's
+- Measured: heaviest scene (pour_liquid_into_cup_random), a client driving 12 joint_position chunks, then the collect hook's two fresh-process replays (the first filmed): sim sidecar docker peak 16.0 GiB (anon 14.9), GPU 9.5 GiB, up to 16 cores while Isaac starts; agent container under 0.1 GiB; per-container sampler (docker stats, cgroup anon, nvidia-smi every 10 s), RTX 4090, 10-10 (the verifier phase then replayed as the privileged verifier does: docker peak 15.7 GiB, GPU 9.6 GiB); since 2026-10-17 the collect hook replays nothing: after the service exits it only encodes the live video on the CPU, so the sidecar's peak is the live service's
 - Limits in the agent phase (docs/protocol/README.md §2.10; `[metadata.resources.limits]`, shown to the agent in `instruction.md`; always measured and reported, and exceeding one fails the trial only when the run sets `RCB_LIMITS_ENFORCE=1`), the agent's container: no GPU, 8 GiB memory, 512 processes, 20 GiB of new files under `/app`, `/tmp`, `/root`; 60 s within 120 s. Expected peak of the whole trial: 16 GiB GPU memory, 33 GiB memory. Limits measured: GPU (sim sidecar): 9.5 GiB on the heaviest scene (sampler, RTX 4090, 10-10) -> max(1.5 x peak, peak + 4), at least 16 for Isaac Sim; memory: agent container max(1.5 x peak, peak + 4, 8) = 8 (a client under 0.1 GiB; no agent-trial sample yet); whole trial: + the sim sidecar's 25 GiB (docker peak 16.0 GiB); processes 512 and disk 20 GiB: design defaults.
 
 ## Details

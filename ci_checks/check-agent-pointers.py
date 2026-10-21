@@ -2,7 +2,8 @@
 """No pointer to an upstream solution in what the agent can read (PROTOCOL §2.7: "a solution, or a pointer to one,
 anywhere the agent can reach" is a MUST NOT).
 
-The agent reads `instruction.md` and what `environment/` puts in its container; `environment/sim/`, `environment/scorer/`
+The agent reads `instruction.md` and what `environment/` puts in its container (not environment/Dockerfile itself, unless it
+copies itself in: `copies_itself`); `environment/sim/`, `environment/scorer/`
 and `environment/rcb_monitor/` run in other containers (check-standard-agent-image.sh) and are not scanned. In those
 files this check refuses:
   1. an http(s) URL to a host that serves code, datasets, models or videos (HOSTS): upstream repositories, demonstration
@@ -11,7 +12,7 @@ files this check refuses:
   3. the name of a demonstration or dataset file (FILES): `*.hdf5`, `*.mcap`, `*.parquet`, `*.rlds`, a Hugging Face
      `datasets/<org>/<name>` id;
   4. a key that names the demonstration or episode a file was made from (IDS): `"demo": "<demo id>"`, `demo_id`,
-     `episode_id`, `source_demo`, ... (board 0105: DexJoCo's instance.npz `meta` named the demonstration whose actions
+     `episode_id`, `source_demo`, ... (DexJoCo's instance.npz `meta` named the demonstration whose actions
      are the reference solution).
 Files the agent's image takes from a files-only image (`COPY --from=<image>` in environment/Dockerfile, the image pinned
 by an images/<name>/FILES.json, scripts/files_image.py) are scanned from their one source in the repository, reported as
@@ -20,14 +21,14 @@ Binary files are skipped except numpy archives (`.npz`, a zip of `.npy` members)
 any text member are read and scanned like a text file (the members' names are reported as `file.npz[member]`); numeric
 members are not read past their header. Images and other binaries are skipped.
 A legitimate mention (a licence notice that must name its source) is listed in ALLOW with its reason. The egress
-allowlist is what stops a download; this check keeps the address out of the task. Board 0072: RoboTangle's
+allowlist is what stops a download; this check keeps the address out of the task. RoboTangle's
 `reference_scene.json` carried `source_url` of the upstream demonstration, and one trial downloaded and replayed it.
 That file was in the simulator image, which this check cannot read: an image's own files are reviewed when the image
 is built (docs/protocol/leakage.md).
 
 Usage: check-agent-pointers.py [task dirs...]   (default: every task dir, tasks/*/*)
 """
-import ast, pathlib, re, sys, zipfile
+import ast, fnmatch, pathlib, posixpath, re, sys, zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -57,23 +58,57 @@ ALLOW = [
 ]
 
 
-SOURCES = {ROOT / files_image.spec(f.parent.name)["source"]: f.parent.name for f in sorted((ROOT / "images").glob("*/FILES.json"))}
+# (source directory, image name, its files): several images may share one source directory (a benchmark's files image and
+# its sidecars' image); a file is reported under the first that lists it, sidecar images last
+SOURCES = [(ROOT / s["source"], f.parent.name, set(s["files"])) for f in sorted((ROOT / "images").glob("*/FILES.json"),
+           key=lambda f: (f.parent.name.endswith("-sim-files"), f.parent.name)) for s in [files_image.spec(f.parent.name)]]
 
 
 def files_name(src: pathlib.Path) -> str:
     """How a file from a files-only image is reported: `files:<image name>/<file>`."""
-    d = next(d for d in SOURCES if d in src.parents)
-    return f"files:{SOURCES[d]}/{src.relative_to(d).as_posix()}"
+    d, name = next((d, n) for d, n, fs in SOURCES if d in src.parents and src.relative_to(d).as_posix() in fs)
+    return f"files:{name}/{src.relative_to(d).as_posix()}"
+
+
+def copies_itself(df: pathlib.Path) -> bool:
+    """Whether a Dockerfile can put itself into its image: a COPY / ADD from the build context (not --from) of the
+    context's root (`.`, `*`, ...) or of a name matching `Dockerfile`; a line this reader cannot split counts as yes."""
+    text = re.sub(r"\\\n", " ", df.read_text())
+    for m in re.finditer(r"^\s*(?:COPY|ADD)\s+(.*)$", text, re.M | re.I):
+        args = m.group(1).strip()
+        if args.startswith("<<"):
+            continue                                  # a heredoc: inline content, no context file
+        if args.startswith("["):
+            try:
+                words = [str(w) for w in ast.literal_eval(args)]
+            except (ValueError, SyntaxError):
+                return True
+        else:
+            words = args.split()
+        flags = [w for w in words if w.startswith("--")]
+        if any(w.startswith("--from=") for w in flags):
+            continue
+        for src in [w for w in words if not w.startswith("--")][:-1]:
+            if re.match(r"^[a-z][a-z0-9+.-]*://", src):
+                continue                              # ADD <url>
+            n = posixpath.normpath(src.lstrip("/")) if src.strip("/") else "."
+            if n in (".", "") or fnmatch.fnmatchcase("Dockerfile", n) or fnmatch.fnmatchcase("Dockerfile", n.split("/")[0]):
+                return True
+    return False
 
 
 def agent_files(task: pathlib.Path):
-    """(path, the name it is reported under) of every file the agent's container gets from the task."""
+    """(path, the name it is reported under) of every file the agent's container gets from the task. environment/Dockerfile
+    is not one of them unless it copies itself into the image (copies_itself): a base stage the task builds from public
+    sources names its upstream sources there, and the agent's container never holds the file."""
     f = task / "instruction.md"
     if f.is_file():
         yield f, "instruction.md"
     env = task / "environment"
     for p in sorted(env.rglob("*")) if env.is_dir() else []:
         rel = p.relative_to(env).parts
+        if p == env / "Dockerfile" and not copies_itself(p):
+            continue
         if p.is_file() and not p.is_symlink() and rel[0] not in SIDECAR_DIRS and "__pycache__" not in rel:
             yield p, p.relative_to(task).as_posix()
     for src in sorted(set(files_image.copied(env / "Dockerfile").values())):   # from a files-only image: its one source

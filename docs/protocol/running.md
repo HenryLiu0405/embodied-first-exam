@@ -2,7 +2,7 @@
 
 Part of the task protocol ([README](README.md); its Appendix H binds every run): how runs are configured, and what
 makes a run official. The sections "Official runs" to "Results" below are the runner's rules:
-`scripts/run_agent_batch.sh` applies them by default, and the scheduler (batch_eval_live `run_policy.py`, called from
+`scripts/run_agent_batch.sh` applies them by default, and the evaluation pool's scheduler (its run policy, called from
 the dispatcher's launch and retry paths) refuses a launch that breaks one.
 
 ## Official runs
@@ -42,11 +42,11 @@ The rule is PROTOCOL Appendix H.5; how the runner applies it:
   `infra_error` / `grader_error`, no `reward.json`, a Harbor exception other than the agent's cutoff, a model-account or
   usage-gateway failure (`scripts/account_failure_check.py`). The agent's own end, its cutoff and its token budget are
   results and are never retried.
-- The voided attempt's directory is moved aside (batch_eval_live: `_superseded/`) and never counted; the retry starts
+- The voided attempt's directory is moved aside (in the evaluation pool: `_superseded/`) and never counted; the retry starts
   from a new environment with the first attempt's recorded configuration. A failed retry keeps the default handling
   (it stays an infrastructure failure, reported as such). A launch that never started a trial is no attempt.
 - One implementation of the rule, `scripts/retry_policy.py` (`decide`, `check_attempts`), tested by the required CI
-  job; batch_eval_live's `run_policy.py` uses it. `write_task_results.py` keeps every attempt of a task x run id in
+  job; the evaluation pool's scheduler uses it. `write_task_results.py` keeps every attempt of a task x run id in
   `attempts.json` and flags a sequence that breaks the rule (`attempts_over_cap`).
 - In-trial crash recovery (a sidecar that replays its journal and resumes the episode, standard_mode.md) is the shared
   layers' implementation, not a rule; a crash it cannot recover is an infrastructure failure, unless every crash was
@@ -187,10 +187,10 @@ node-local scratch (podman's storage does not work on most network file systems)
    [network]
    firewall_driver = "none"           # only on a node without iptables
    ```
-   plus `policy.json` (the build's `etc/containers/policy.json`), `registries.conf` with
-   `unqualified-search-registries = ["docker.io"]` and `short-name-mode = "permissive"` (Harbor's egress sidecar is
-   built `FROM` a short image name, and without a terminal podman refuses to ask), and, without `/etc/subuid` entries,
-   `storage.conf` with `[storage.options.overlay] ignore_chown_errors = "true"`.
+   plus `policy.json` (the build's `etc/containers/policy.json`) and, without `/etc/subuid` entries, `storage.conf` with
+   `[storage.options.overlay] ignore_chown_errors = "true"`. Harbor's egress sidecar is built `FROM` a short image name,
+   which podman's enforcing short-name mode refuses without a terminal; this repository's `harbor run` pulls it (and the
+   allowlist probe's alpine) by its full `docker.io/` name first, so `registries.conf` needs no change.
 3. Without a user systemd session netavark cannot start aardvark-dns through `systemd-run`; a `systemd-run` early on
    `PATH` that drops its options and execs the command works.
 4. Start the API and run:
@@ -202,16 +202,39 @@ node-local scratch (podman's storage does not work on most network file systems)
 5. GPU tasks: podman ignores compose's `driver: nvidia` device request, and the task's processes then find no driver
    (`Found no NVIDIA driver`, `libnvidia-ml.so.1: cannot open shared object file`). Generate a CDI spec for the
    allocation's GPUs (`nvidia-ctk cdi generate --output=<dir>/nvidia.yaml`, and `cdi_spec_dirs = ["<dir>"]` under
-   `[engine]`), and run a stamped copy whose compose files ask for the CDI device instead (both
-   `environment/docker-compose.yaml` and `tests/docker-compose.yaml`):
+   `[engine]`). `harbor run -e podman` with this repository's set flags (`-d embodied-first-exam`, as above) then runs
+   each GPU task from a stamped copy whose compose files (`environment/` and `tests/`) ask for the CDI device
+   `nvidia.com/gpu=all` instead (`EFE_PODMAN_GPUS` names another, e.g. `nvidia.com/gpu=0` on a node with several GPUs
+   for RoboARC, whose renderer needs exactly one), and removes the copies after the job. For a bare `harbor run -p`,
+   make that copy yourself:
    ```bash
    c=$(python3 scripts/stamp_mtimes.py stage tasks/<benchmark>/<task> "$(mktemp -d)")
    find "$c" -name docker-compose.yaml -exec sed -i -e 's/- driver: nvidia/- driver: cdi/' \
      -e 's/^\( *\)count: 1$/\1device_ids: ["nvidia.com\/gpu=all"]/' {} +
+   python3 scripts/stamp_mtimes.py "$c"
    harbor run -e podman -p "$c" -a oracle -y -o $PWD/jobs
    ```
-6. The `rcb_monitor` sidecar can stay "Stopping" after a trial under rootless podman on cgroup v2; stop its container
-   (or the `monitor.py` process) by hand. On cgroup v1 the resource caps are not applied (`RCB_LIMITS_ENFORCE` stays 0).
+6. Base images built from their recipe (AM-Bench, BEHAVIOR-1K, iSpatialGym, ManiGuard, RoboDojo, RoboLab, VLABench,
+   YAMLab): their tasks' Dockerfiles start with the recipe of `efe-private:<name>-<version>` (the stage between
+   `# >>> images/<name>/Dockerfile` and `# <<< images/<name>/Dockerfile`) and name that image as `build.cache_from`.
+   Docker's BuildKit takes the image's layers from that cache; podman ignores `cache_from` and would build the whole
+   recipe on every host (20-90 min, up to 150 GB). `harbor run -e podman` with this repository's set flags therefore
+   asks podman for the image first (`podman image inspect`, else `podman pull`, once per image and job; the private
+   images need `podman login ghcr.io` with a token that can read the organization's packages) and, when it has it, runs
+   the task from a stamped copy whose `environment/Dockerfile`, `environment/sim/Dockerfile` and `tests/Dockerfile`
+   say `FROM <the image> AS <the stage>` instead of the recipe. When the pull fails it says so and the task builds the
+   recipe from source, as before. `EFE_PODMAN_BUILD_FROM_SOURCE=1` turns this off (always the recipe). For a bare
+   `harbor run -p`, the same copy by hand: `podman pull` the image, stage a copy as in 5., replace the block with that
+   `FROM` line and stamp the copy again.
+7. Where podman cannot give each container a cgroup of its own (cgroup v1, or a cgroup v2 node whose cgroup is not
+   delegated to your user, e.g. a Slurm job step), the resource caps are not applied (`RCB_LIMITS_ENFORCE` stays 0), and
+   podman cannot stop the `rcb_monitor` sidecar, which shares the host's PID namespace (podman stops such a container by
+   signalling its cgroup's processes): the monitor then ends itself once its record is sealed.
+8. On cgroup v2 the containers' CPU caps need the `cpu` controller delegated to your user: when
+   `/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers` lacks `cpu` (systemd
+   delegates only `memory pids` by default on some distributions), every container fails to start with
+   ``crun: controller `cpu` is not available``. An administrator enables it (systemd `Delegate=cpu cpuset io memory
+   pids` for `user@.service`); a user cannot.
 
 ## Running a two-mode batch (privileged + standard)
 ```bash
@@ -335,6 +358,9 @@ places where solutions are published out of reach). Both installs work with and 
 usage gateway (Debian 12 and 13, Ubuntu 22.04 images).
 In the Ubuntu images built on NVIDIA's CUDA base, `apt-get update` warns about NVIDIA's own repository
 (developer.download.nvidia.com is not on the list) and goes on; the Ubuntu archives answer.
+Before it applies an allowlist, Harbor checks the host kernel once per job by running a small alpine image, and gives
+the pull and run 30 s: a slower pull reads as "allowlist unsupported" for the whole job. On docker and podman this
+repository's `harbor run` (`scripts/efe.py`) pulls that image first when it is missing.
 
 The list is the one switch.
 - Another host for every task: add it to `HOSTS` (to `PACKAGE_HOSTS` too if a run through the gateway should reach it

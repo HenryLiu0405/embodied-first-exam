@@ -28,7 +28,7 @@ joint space while carrying the plug (the pick and the insertion under the desk e
 configurations), turns it polarity-up in front of the desk edge, aligns it with port 4 in closed loop on the plug pose,
 inserts it about 11.9 of 12 mm, releases it (index up, thumb down, then open) and withdraws. In standard mode the oracle
 submits the same rows through `rcb_client` in 250-row chunks. The authoring controller that produced the rows
-(`scripts/dexhand/families/usb_plug_insert/tools/arm_author.py`, closed loop on the simulator state) computes robot
+(closed loop on the simulator state) computes robot
 motor targets only; it never drives an object pose or applies an object force, and it is never copied into the agent's
 environment or image.
 
@@ -68,4 +68,4 @@ an open cavity with generous clearance, receptacle tongue and contacts are visua
 hub's upstream cable is a visual rigidly attached to the hub, and the plug cable is a passive 20-link ball-joint rod.
 
 ### Change Log
-- 2026-10-16 (board 0136, video only): the verifier renders the replay video (`/logs/verifier/replay.mp4`) with a third fresh replay after `reward.json` is written, in its remaining time. Before, the privileged verifier rendered no video. The video films at most 300 steps (a longer episode at a larger stride; an OSMesa frame of an arm scene takes up to ~3.6 s on two cores), and the video, verifier and collect limits cover the longest archive the row limit allows. The verdict, the replays and `reward.json` are unchanged.
+- 2026-10-16 (video only): the verifier renders the replay video (`/logs/verifier/replay.mp4`) with a third fresh replay after `reward.json` is written, in its remaining time. Before, the privileged verifier rendered no video. The video films at most 300 steps (a longer episode at a larger stride; an OSMesa frame of an arm scene takes up to ~3.6 s on two cores), and the video, verifier and collect limits cover the longest archive the row limit allows. The verdict, the replays and `reward.json` are unchanged.

@@ -33,7 +33,7 @@ instance_seed = 0
 reset_budget = 50
 expert_time_estimate_hours = 12.0
 oracle = "none"
-oracle_evidence = "no reference solution; the referee is tested by scripts/embodied-olympics/tests/test_juggling_feet.py: positive by injection (a real release; the pelvis held where it stands and the ball put back over the toe after each touch; ten real strikes by the right foot's own motors, a lowcmd hip/knee stroke lifting the toe at 0.8 m/s, in/out about 3 m/s, contacts 0.011-0.013 s against a 0.05 s carry limit); negatives: a still raised foot (0.54 of the speed back, not counted), soft strikes, below knee height, the shin above the instep, the thigh, the chest, the head, a hand (also a hand during a foot touch inside the release grace), resting on the foot, trapped between the feet, a re-grip, out of the grid, down. On the G1 a falling ball meets the foot clear of the lower leg's collision hull only on the front 2-3 cm of its top; a foot-following strike controller (pelvis held) lost the ball after two touches; nothing built in stands on one leg; human review in the pull request that adds the benchmark (PROTOCOL §2.7)"
+oracle_evidence = "no reference solution; the referee is tested: positive by injection (a real release; the pelvis held where it stands and the ball put back over the toe after each touch; ten real strikes by the right foot's own motors, a lowcmd hip/knee stroke lifting the toe at 0.8 m/s, in/out about 3 m/s, contacts 0.011-0.013 s against a 0.05 s carry limit); negatives: a still raised foot (0.54 of the speed back, not counted), soft strikes, below knee height, the shin above the instep, the thigh, the chest, the head, a hand (also a hand during a foot touch inside the release grace), resting on the foot, trapped between the feet, a re-grip, out of the grid, down. On the G1 a falling ball meets the foot clear of the lower leg's collision hull only on the front 2-3 cm of its top; a foot-following strike controller (pelvis held) lost the ball after two touches; nothing built in stands on one leg; human review in the pull request that adds the benchmark (PROTOCOL §2.7)"
 
 [metadata.resources]
 # minimum compute to run this task (docs/protocol/README.md §2.9)
@@ -45,7 +45,7 @@ gpu_class = "none"
 verifier_min_cpus = 2.0
 verifier_min_memory_gb = 3.0
 verifier_min_gpu_memory_gb = 0.0
-measured = "author estimate (4090-ws1, 2026-10-11): CPU-only; the sim sidecar steps and renders on one or two cores (under 1 GB), the agent's container holds the harness and the client"
+measured = "author estimate (an RTX 4090 workstation, 2026-10-11): CPU-only; the sim sidecar steps and renders on one or two cores (under 1 GB), the agent's container holds the harness and the client"
 
 [metadata.resources.limits]
 # agent-phase limits in GiB (docs/protocol/README.md §2.10); scope: trial = every container, agent = the agent's container;
@@ -94,7 +94,7 @@ command = "kill -9 -1 2>/dev/null; exit 0"
 timeout_sec = 30
 
 # Then the episode ends: SIGUSR1 to the service (re-sent every 30 s, in case it was restarting), which grades the live
-# episode (no grading replay, board 0151). The loops run on the clock, inside timeout_sec: the verdict ("finalized":
+# episode (no grading replay). The loops run on the clock, inside timeout_sec: the verdict ("finalized":
 # true, written before any video is rendered) may take until 840 s (the end waits through a crash-recovery resume);
 # then the hook waits for the video, one render pass from the trajectory ("video_pending"), until 870 s -- a video that
 # is not ready by then is lost, the verdict is not.

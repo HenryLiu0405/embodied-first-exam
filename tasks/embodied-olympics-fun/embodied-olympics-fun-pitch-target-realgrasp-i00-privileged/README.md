@@ -7,7 +7,7 @@
 | Twin | `embodied-olympics-fun-pitch-target-realgrasp-i00-standard` |
 | Simulator / robot | `mujoco` / `unitree-h1-2` |
 | Family / instance | `pitch_target_realgrasp` / seed 0 |
-| Oracle | `none` — no reference solution; the referee is tested by scripts/embodied-olympics/tests/test_pitch_target_realgrasp.py: positive by injection (a real release by opening the right Dex1 gripper on the plate, then 22 m/s: a strike; a 14.5 m/s lob too); real overhand swings release at 3-8 m/s (too early: back onto the robot; 0.25 s in: 1.4 m ahead on the mound); a 5 N clamp loses the ball in the swing, 10 N keeps it; negatives: held past the pitch timer, dropped, no foot on the plate, a bounce, high, wide, held again, touched after the release, a fall; human review in the pull request that adds the benchmark (PROTOCOL §2.7) |
+| Oracle | `none` — no reference solution; the referee is tested: positive by injection (a real release by opening the right Dex1 gripper on the plate, then 22 m/s: a strike; a 14.5 m/s lob too); real overhand swings release at 3-8 m/s (too early: back onto the robot; 0.25 s in: 1.4 m ahead on the mound); a 5 N clamp loses the ball in the swing, 10 N keeps it; negatives: held past the pitch timer, dropped, no foot on the plate, a bounce, high, wide, held again, touched after the release, a fall; human review in the pull request that adds the benchmark (PROTOCOL §2.7) |
 | Agent time budget | 7200 s; tokens: protocol default (PROTOCOL §5) |
 | Base image | `ghcr.io/mll-lab-nu/efe:embodied-olympics-fun-0.2.1` |
 
@@ -35,7 +35,7 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | GPU memory | 0 GB | 0 GB |
 
 - GPU: not needed.
-- Measured: author estimate (4090-ws1, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
+- Measured: author estimate (an RTX 4090 workstation, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
 - Limits in the agent phase (docs/protocol/README.md §2.10; `[metadata.resources.limits]`, shown to the agent in `instruction.md`; always measured and reported, and exceeding one fails the trial only when the run sets `RCB_LIMITS_ENFORCE=1`), every container of the trial: no GPU, 13 GiB memory, 512 processes, 20 GiB of new files under `/app`, `/tmp`, `/root`; 60 s within 120 s. Expected peak of the whole trial: 0 GiB GPU memory, 13 GiB memory. Limits measured: author estimate: no trials yet; memory under the 16 GiB cap by the margin the monitor needs (an agent may run several worlds at once or train a controller); disk 20 GiB for downloaded tools and controllers; processes 512: design default.
 
 ## Details

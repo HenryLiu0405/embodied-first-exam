@@ -12,8 +12,7 @@ Every image is public: Harbor pulls it.
 
 - Name: RoboARC (display) / `roboarc` (task prefix, image `ghcr.io/mll-lab-nu/efe:roboarc-<images/roboarc/VERSION>`, `images/roboarc/`, this
   page). Code identifiers keep the simulator's name: the package `topogym`, the tooling `rcb_topogym.py`, `TOPOGYM_*` variables, the family keys
-  (`interlocked_claws`), and the development branch dev/robotangle_mujoco with its `scripts/robotangle/` and
-  `images/robotangle/`; inside the image, `/opt/robotangle/` (the instances and `stage_instance.py`).
+  (`interlocked_claws`); inside the image, `/opt/robotangle/` (the instances and `stage_instance.py`).
 
 ## Tasks
 
@@ -30,7 +29,8 @@ Every task shares the tooling `rcb_topogym.py`, the graders, the sim service and
 - the privileged images (agent `/opt/tools/`, verifier `/tests/`) take `rcb_topogym.py`, `render_bridge.py` and
   `nyx_direct.py` from the files-only image `ghcr.io/mll-lab-nu/efe:roboarc-files-<version>` (`images/roboarc-files/`, built
   from `embodied_first_exam/benchmarks/roboarc/`; `FILES.json` pins its digest and the files' sha256) with
-  `COPY --from=<image@digest>`: the privileged task dirs carry no copy. The standard sim service keeps its copies in `environment/sim/` (bind-mounted);
+  `COPY --from=<image@digest>`: the privileged task dirs carry no copy. The standard sim service is built from `environment/sim/` (its `Dockerfile`)
+  and takes them, and the rest of the files it shares with other tasks, at `/srv` from `images/roboarc-sim-files/`;
 - the texts state what the tooling grades: the contact-review values come from `CONTACT_RULE`, and the grasping rule is
   `Session.grasp_rules()` of the instance (the weld's slip force over 20 ms, 60 N ALOHA / 65 N Robotiq, and the
   Robotiq's release after 0.2 s without finger contact).
@@ -47,9 +47,9 @@ Every task shares the tooling `rcb_topogym.py`, the graders, the sim service and
   `tests/runtime_binding.json`), the goal-state images (its `environment/goal/`) and the standard agent Dockerfile.
   The privileged reference must be the file `images/roboarc/release.json`'s evidence names (`trajectory_sha256`).
   The task directories are the deliverable; the tooling that built them is kept outside this repository.
-- The release files are written by `scripts/robotangle/release_rebuild.py --onto <main>` on dev/robotangle_mujoco
-  (its `mujoco_release.json` names each base: a tier through its family's `numbers`, a new design by its key): image,
-  instances made in the image, release files, render, checks, Harbor oracle / nop.
+- The release (the image, the instances made in it, the release files, the renders, the checks and Harbor's oracle / nop
+  runs) is built outside this repository; each base is named either as a tier of its family (`numbers`) or, for a new
+  design, by its key.
 - Large files: the frozen instances are in the public image, under `/opt/robotangle/instances/<base>/`, pinned file by
   file in `images/roboarc/assets.json`.
 - Image: `ghcr.io/mll-lab-nu/efe:roboarc-<images/roboarc/VERSION>`, built FROM the published
@@ -153,7 +153,6 @@ or robot base position either.
 
 ## Registration (the lines a rename changes)
 
-`--bench` of dev/robotangle_mujoco's `scripts/robotangle/release_rebuild.py`;
 `git mv` of `images/roboarc/`, `images/roboarc-files/` (a new image name: build, push, pin) and this page; then the registration lines: `scripts/task_conventions.py`
 (`BENCHMARKS`), `scripts/task_resources.toml`
 (the `^roboarc-` rules), `docs/TAXONOMY.md`, `README.md`, the checks that name a benchmark's prefix

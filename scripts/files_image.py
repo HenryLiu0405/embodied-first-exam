@@ -33,7 +33,9 @@ ghcr.io/mll-lab-nu/efe:<name>-<VERSION>, or efe-private:<name>-<VERSION> when im
     python3 scripts/files_image.py pin <name> <digest>    after the push: check the pushed image, then pin it in FILES.json
     python3 scripts/files_image.py verify-image <name>    the pinned image carries exactly FILES.json's files and modes
 
-A task's Dockerfile names the image by digest (`COPY --from=<tag>@sha256:<digest>`). Docker's containerd image store
+A task's Dockerfile names the image by digest (`COPY --from=<tag>@sha256:<digest>`); so does a sidecar's own Dockerfile
+(environment/sim/ or environment/scorer/, compose `build: context: sim`: the directory at /srv and the shared files at
+their paths under /srv, where the directory's copies would have been). Docker's containerd image store
 (the default of Docker Engine 29 and Docker Desktop: `docker info -f '{{.DriverStatus}}'` names
 io.containerd.snapshotter.v1) resolves that reference to a loaded image with that digest, so a task builds from a local
 `build` without the registry; the classic store (overlay2) knows digests only of pulled images and asks the registry.
@@ -77,14 +79,6 @@ def spec(name: str) -> dict:
 
 def image(name: str) -> str:
     return spec(name)["image"]
-
-
-def copy_line(name: str, file: str, dest: str) -> str:
-    """The Dockerfile line that puts the image's /<file> at <dest> (a file path)."""
-    s = spec(name)
-    if file not in s["files"]:
-        raise KeyError(f"images/{name}/FILES.json has no {file}")
-    return f"COPY --from={s['image']} /{file} {dest}"
 
 
 PACKAGES = ("ghcr.io/mll-lab-nu/efe", "ghcr.io/mll-lab-nu/efe-private")   # one public, one private package: <name>-<version> tags

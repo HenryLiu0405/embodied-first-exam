@@ -10,7 +10,7 @@ passes. A mutation that passes is a blind rule: fix the check, not this list.
 
     python3 ci_checks/check-ci-selftest.py [--tier invariants|advisory|all]    # default: all. Standard library only.
 
-Two tiers (board 0124). `--tier invariants` (the required CI job `invariants`, ci_checks/run_invariants.sh): the
+Two tiers. `--tier invariants` (the required CI job `invariants`, ci_checks/run_invariants.sh): the
 mutations of the rules that enforce docs/protocol/README.md Appendix H; each must FAIL its check. `--tier advisory` (the job
 `advisories`): the mutations of the advisory rules; each must still be reported (a finding, not blocking).
 """
@@ -88,6 +88,14 @@ def in_service(service: str, lines: str, after: str = ""):
 
 def append(text: str):
     return lambda s: s + text
+
+
+def sidecar_drift(name: str, file: str, text: str = "# drift\n") -> dict:
+    """A drifted copy of a file the task's sidecar takes from a files-only image (environment/sim/Dockerfile), put back
+    into environment/sim/: the copies of a shared file must still be one version."""
+    import files_image
+    src = files_image.copied(tc.task_dir(name) / "environment/sim/Dockerfile")["/srv/" + file]
+    return {"+environment/sim/" + file: lambda _: src.read_text() + text}
 
 
 def npz_text(member: str, text: str) -> bytes:
@@ -182,7 +190,7 @@ MUTATIONS = [
      OPEN, TOML, sub(r'^network = "open".*\n', ""), ISOLATION, '[agent].network_mode must be "allowlist"'),
     ("a network declaration that is neither the allowlist nor open",
      OPEN, TOML, sub(r'^network = "open"', 'network = "any"'), ISOLATION, "[metadata] network = 'any'"),
-    # ---- Appendix H.6, the verifier has no network (board 0157): without [verifier] network_mode Harbor leaves the
+    # ---- Appendix H.6, the verifier has no network: without [verifier] network_mode Harbor leaves the
     # separate verifier on its environment's baseline, public
     ("a privileged verifier with the network (no [verifier] network_mode)",
      PRIV, TOML, sub(r'^(\[verifier\]\n(?:(?!\[).*\n)*?)network_mode = "no-network".*\n', r"\1"), ISOLATION,
@@ -208,7 +216,7 @@ MUTATIONS = [
     ("... names the demonstration its scene was restored from (the reference replays that demonstration's actions)",
      PRIV, "environment/instance.json", sub(r"^\{", '{"demo": "boxing_books_demo_17", ', count=1, flags=0),
      POINTERS, "id `demo` locates upstream material"),
-    ("... in a string member of a numpy archive the agent reads (DexJoCo's instance.npz `meta`, board 0105)",
+    ("... in a string member of a numpy archive the agent reads (DexJoCo's instance.npz `meta`)",
      PRIV, "+environment/extra.npz", lambda s: npz_text("meta.npy", '{"source": "x", "demo": "water_plant_demo_10_2026"}'),
      POINTERS, "environment/extra.npz[meta.npy]:1: id `demo`"),
     ("a step with a network policy of its own (Harbor would let it override [agent])",
@@ -216,6 +224,9 @@ MUTATIONS = [
     ("the instruction links the upstream repository",
      STD, "instruction.md", append("\nThe benchmark's code: https://github.com/StanfordVL/BEHAVIOR-1K\n"), POINTERS,
      "URL `https://github.com/StanfordVL/BEHAVIOR-1K` locates upstream material"),
+    ("environment/Dockerfile copies itself into the image, with an upstream URL in it",
+     STD, "environment/Dockerfile", append("# https://github.com/StanfordVL/BEHAVIOR-1K\nCOPY . /opt/ctx/\n"), POINTERS,
+     "environment/Dockerfile:"),
     ("the instruction states the external-material rule in other words",
      STD, "instruction.md", sub(r"This is an honour rule; trials are reviewed\.", "Do as you like."), RESOURCES,
      "does not state `## External material`"),
@@ -308,30 +319,35 @@ MUTATIONS = [
      ISOLATION, "top-level `configs` is not allowed"),
     ("a task file read through env_file", STD, COMPOSE, in_service("main", "    env_file: ./sim/instance.json"), ISOLATION, "service main: `env_file` is not allowed"),
     ("the agent's image built from the task directory", STD, COMPOSE, in_service("main", "    build:\n      context: .."), ISOLATION, "service main: `build` is not allowed"),
+    ("a build cache read from a host directory", STD, COMPOSE, in_service("main", "    build:\n      cache_from: [\"type=local,src=/\"]"), ISOLATION, "is not a registry image reference"),
+    ("a sidecar built from a context outside the task", STD, COMPOSE, sub(r"^      context: \./sim$", "      context: ../.."), ISOLATION, "must be a relative path inside environment/"),
+    ("a sidecar build with a secret", STD, COMPOSE, in_service("sim", "      secrets: [tok]", after=r"^      context: "), ISOLATION, "service sim: `build` is not allowed beyond"),
     ("another compose file included", STD, COMPOSE, lambda s: "include:\n  - extra.yaml\n" + s, ISOLATION, "top-level `include` is not allowed"),
     ("a service whose keys are indented deeper than the reader looks",
      STD, COMPOSE, sub(r"(?s)^  main:\n.*?(?=^  sim:)", "  main:\n      networks: [default]\n      depends_on: [sim]\n"), ISOLATION, "at an unexpected indentation"),
     ("the kernel's OOM killer switched off for a container", STD, COMPOSE, in_service("sim", "    oom_kill_disable: true"), ISOLATION, "`oom_kill_disable` is not allowed"),
     # ---- pinned images in every stage and file; the verifier's log directory emptied, not a look-alike of it
     ("a second, unpinned stage in the verifier's Dockerfile", STD, TEST_DF, append("FROM python:latest\nCOPY --from=0 /tests /tests\n"), DOCKERFILE, "must be a pinned registry image"),
-    ("a sidecar image whose tag is a variable", STD, COMPOSE, sub(r"^(    image: ghcr\.io/mll-lab-nu/efe-private:behavior)-\S+", r"\1-${TAG:-latest}"), DOCKERFILE, "must be pinned"),
+    ("a sidecar image whose tag is a variable", STD, COMPOSE, sub(r"^(    image: ghcr\.io/mll-lab-nu/efe:monitor)-\S+", r"\1-${TAG:-latest}"), DOCKERFILE, "must be pinned"),
     ("tests/test.sh removes only a look-alike of the verifier's logs",
      STD, TEST_SH, sub(r"^rm -rf /logs/verifier/\*", "rm -rf /logs/verifier/*.bak"), ISOLATION, "must empty /logs/verifier"),
     # ---- review round 3, M6: benchmarks without a generator check mode (one task hand-edited, its digest refreshed)
-    ("DexToolBench: one task's grader edited", DTB, "tests/grade.py", append("# drift\n"), IDENTITY, "dextoolbench: 2 versions of standard tests/grade.py"),
-    ("... its service", DTB, "environment/sim/server_mj.py", append("# drift\n"), IDENTITY, "environment/sim/server_mj.py differs from images/mujoco/limited/server_mj.py"),
+    ("DexToolBench: one task's grader is another file of the files image", DTB, TEST_DF,
+     sub(r" /standard/tests/grade\.py /tests/grade\.py$", " /privileged/tests/grade.py /tests/grade.py"), IDENTITY,
+     "dextoolbench: 2 versions of standard tests/grade.py"),
+    ("... its service", DTB, None, sidecar_drift(DTB, "server_mj.py"), IDENTITY, "environment/sim/server_mj.py differs from images/mujoco/limited/server_mj.py"),
     ("... its client (from the standard client image, another digest)", DTB, "environment/Dockerfile",
      sub(r"(efe:standard-files-\S+@sha256:)[0-9a-f]{64}( /rcb1\.py )", r"\g<1>" + "0" * 64 + r"\2"), IDENTITY, "not the pinned"),
     ("... its tooling module (from the files image, another digest)", DTB_P, TEST_DF,
      sub(r"(efe:dextoolbench-files-\S+@sha256:)[0-9a-f]{64}( /privileged/environment/rcb_dtb\.py )", r"\g<1>" + "0" * 64 + r"\2"), IDENTITY,
      "not the pinned"),
     ("... tests/test.sh without the resource step", DTB_P, TEST_SH, NO_TRAP, IDENTITY, "dextoolbench: 2 versions of privileged tests/test.sh"),
-    ("MuJoCo Playground (ALOHA): the same service edited", MJ, "environment/sim/server_mj.py", append("# drift\n"), IDENTITY, "dextoolbench: 2 versions of standard environment/sim/server_mj.py"),
-    ("MetaWorld+: one task's service edited", MWP, "environment/sim/server_mw.py", append("# drift\n"), IDENTITY, "environment/sim/server_mw.py differs from images/metaworld/standard/server_mw.py"),
+    ("MuJoCo Playground (ALOHA): the same service edited", MJ, None, sidecar_drift(MJ, "server_mj.py"), IDENTITY, "dextoolbench: 2 versions of standard environment/sim/server_mj.py"),
+    ("MetaWorld+: one task's service edited", MWP, None, sidecar_drift(MWP, "server_mw.py"), IDENTITY, "environment/sim/server_mw.py differs from images/metaworld/standard/server_mw.py"),
     ("... its grader (from the files image, another digest)", MWP_P, TEST_DF,
      sub(r"(efe:metaworldplus-files-\S+@sha256:)[0-9a-f]{64}( /privileged/environment/mw_tool\.py )", r"\g<1>" + "0" * 64 + r"\2"), IDENTITY,
      "not the pinned"),
-    ("... its tooling module", MWP, "environment/sim/mw_tool.py", append("# drift\n"), IDENTITY, "metaworldplus: 2 versions of mw_tool.py"),
+    ("... its tooling module", MWP, None, sidecar_drift(MWP, "mw_tool.py"), IDENTITY, "metaworldplus: 2 versions of mw_tool.py"),
     ("... tests/test.sh without the resource step", MWP, TEST_SH, NO_TRAP, IDENTITY, "metaworldplus: 2 versions of standard tests/test.sh"),
     ("RoboTwin: a privileged task's tests/test.sh without the resource step", TWIN_P, TEST_SH, NO_TRAP, IDENTITY, "robotwin_2_0: 2 versions of privileged tests/test.sh"),
     ("... its grader", TWIN_P, "tests/grade.py", append("# drift\n"), IDENTITY, "robotwin_2_0: 2 versions of privileged tests/grade.py"),
@@ -339,8 +355,10 @@ MUTATIONS = [
     ("Embodied Olympics - Fun: a verifier takes its grader from an image other than the pinned files image", FUN_P, TEST_DF,
      sub(r"(efe:embodied-olympics-fun-files-\S+@sha256:)[0-9a-f]{64}( /grade\.py )", r"\g<1>" + "0" * 64 + r"\2"), IDENTITY,
      "not the pinned"),
-    ("... a standard sidecar's tooling edited (compared with the files image's)", OPEN, "environment/sim/rcb_rfo.py",
-     append("# drift\n"), IDENTITY, "embodied-olympics: 2 versions of rcb_rfo.py"),
+    ("... a standard sidecar's tooling edited (compared with the files image's)", OPEN, None,
+     sidecar_drift(OPEN, "rcb_rfo.py"), IDENTITY, "embodied-olympics: 2 versions of rcb_rfo.py"),
+    ("... a sidecar takes its shared files from an image other than the pinned files image", OPEN, "environment/sim/Dockerfile",
+     sub(r"(efe:embodied-olympics-fun-sim-files-\S+@sha256:)[0-9a-f]{64}", r"\g<1>" + "0" * 64), IDENTITY, "not the pinned"),
     # ---- caps and minimums (PROTOCOL §2.10)
     ("a sidecar's memory cap below the verifier phase's declared minimum (the kernel would kill it at a cap the task itself says is too low)",
      HEAVY, None, {TOML: sub(r"^(sim = \{ cpus = [0-9.]+, memory_gb = )[0-9.]+", r"\g<1>20.0"),
@@ -407,7 +425,7 @@ MUTATIONS = [
     ("a standard-realtime service that declares no reset budget",
      "humanoidbench-loco-walk-i00-standard-realtime", COMPOSE, sub(r"^\s*RCB_RESET_BUDGET:.*\n", ""), REALTIME,
      "must declare its reset budget"),
-    # PROTOCOL §4 (board 0136): every graded trial leaves a replay video
+    # PROTOCOL §4: every graded trial leaves a replay video
     ("a privileged verifier that renders no video", TWIN_P, None,
      {"tests/grade.py": sub(r"\.mp4\b", ".bin", count=0), "tests/rcb_traj.py": sub(r"\.mp4\b", ".bin", count=0)}, VIDEO,
      "its verifier renders no replay video"),

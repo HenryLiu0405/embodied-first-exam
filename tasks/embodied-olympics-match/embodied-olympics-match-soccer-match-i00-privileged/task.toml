@@ -18,7 +18,7 @@ instance_seed = 7
 opponent_level = 2
 source_commits = ["0d7f680cc049"]
 source_task = "roboolympics/soccer-match-wallclock-program-standard"
-exporter = "roboolympics tools.fullsim.export"
+exporter = "Embodied Olympics full-simulator exporter"
 official = false
 expert_time_estimate_hours = 1.0
 oracle = "partial"
@@ -35,7 +35,7 @@ gpu_class = "none"
 verifier_min_cpus = 6.0
 verifier_min_memory_gb = 8.0
 verifier_min_gpu_memory_gb = 0.0
-measured = "Harbor 0.23 oracle trial (4090-ws2, 2026-10-17): CPU-only MuJoCo with two Booster T1 humanoids per team; the verifier holds the service, the program, one replay and the video renderer; 6 CPUs pinned (the match runs on the wall clock)"
+measured = "Harbor 0.23 oracle trial (an RTX 4090 workstation, 2026-10-17): CPU-only MuJoCo with two Booster T1 humanoids per team; the verifier holds the service, the program, one replay and the video renderer; 6 CPUs pinned (the match runs on the wall clock)"
 
 [metadata.resources.limits]
 # agent-phase limits in GiB (docs/protocol/README.md §2.10); scope: trial = every container, agent = the agent's container;

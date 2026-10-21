@@ -23,7 +23,7 @@ stay outside this repository. Code several tasks share may go in `embodied_first
 recommended place is the benchmark's image (`images/<sim>/`), so the tasks get it from the image.
 
 ## Proposal (new benchmarks)
-Open a benchmark-proposal issue first (or e-mail the proposal to embodied-first-exam@gmail.com, as the
+Open a benchmark-proposal issue first (or e-mail the proposal to embodiedfirstexam@gmail.com, as the
 [contribute page](https://www.embodied-first-exam.ai/contribute/) describes). A good proposal shows that the tasks are:
 - **verifiable** by a program, in a fresh process, without a learned judge;
 - **solvable** — a positive example the verifier (standard modes: the sidecar) scores 1: an oracle, an upstream expert or policy, a successful
@@ -77,7 +77,16 @@ A new benchmark's shared-files change adds its label to `scripts/task_convention
    into the compose file; a cap your compose file sets itself must be the declared value (`check-resources.py`).
 4. Base images: `images/<sim>/Dockerfile`, versioned in `images/<sim>/VERSION`, built and pushed with
    `scripts/build_images.sh` / `scripts/push_images.sh`. Images that cannot be published carry `images/<sim>/BUILD_ONLY`
-   and build instructions.
+   and build instructions. A task on a private image builds it itself when the runner cannot pull it: its Dockerfile
+   starts with the recipe between `# >>> images/<sim>/Dockerfile` and `# <<< images/<sim>/Dockerfile` (the recipe's
+   first `FROM ... AS <sim>-base`, the task's own stage `FROM <sim>-base`; `normalize` writes the current recipe there),
+   and its compose service names the private image in `build.cache_from` (main: `build:` with `cache_from` only; a
+   sidecar: `build:` with `context` / `dockerfile` inside environment/ and `cache_from`). The recipe needs no build
+   context: every file it takes comes from a public files-only image (`COPY --from=<image@digest>`) or a public URL
+   (`ADD --checksum`; a URL into this repository names a commit that a tag keeps reachable, since main is squashed and
+   GitHub drops unreachable commits), system packages from a dated snapshot (e.g. snapshot.debian.org). The private image is that
+   recipe built with BuildKit's inline cache (`scripts/build_images.sh` adds it to every BUILD_ONLY image): a runner
+   that can pull it takes its layers, any other runner builds the same layers from public sources.
 5. Run agents with Harbor's native agents only (`-a codex`, `-a claude-code`, …). No adapters, and no gateway that
    holds credentials or changes requests; the optional usage gateway that only records token usage is allowed (docs/protocol/running.md "Official runs").
 
@@ -146,6 +155,13 @@ The checklist is in PROTOCOL §4.
   comparable), set the new `[agent] timeout_sec` in the tasks concerned, in both twins, run `python3 scripts/task_conventions.py` on them
   and say old -> new and why in the pull request (docs/protocol/running.md "The agent's time"). The task keeps its name and gets
   a new digest; results under the earlier cutoff are ranked separately (PROTOCOL §2, H.8).
+- A sidecar's directory (`environment/sim/`, `environment/scorer/`, served at `/srv`) holds only what is the task's own:
+  its frozen instance, per-task grader data, files no other task has. Files it shares with other tasks come from a
+  pinned files-only image, the benchmark's `images/<folder>-sim-files/` (sources under `embodied_first_exam/benchmarks/<folder>/`),
+  or `images/standard-sim-files/` for the 2.2 / 2.4 / realtime layers: the sidecar is built from its directory
+  (`build: context: sim`, its `Dockerfile`: `COPY . /srv/`, then `COPY --from=<image@digest>` of those files at their paths
+  under `/srv`; `.dockerignore` keeps the two build files out). A private evaluator's own data (hidden plants, case banks)
+  and files that may not be redistributed stay in the task dir.
 - Pin everything (`FROM` tags or digests, pip versions); no network access during verification.
 - The agent's egress is the model APIs and the package registries (PyPI, the Debian / Ubuntu apt archives) by default
   (`[agent] network_mode = "allowlist"` with the hosts of `scripts/set_agent_egress.py`; PROTOCOL Appendix H.6); a task

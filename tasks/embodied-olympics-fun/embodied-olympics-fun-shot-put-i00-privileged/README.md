@@ -7,7 +7,7 @@
 | Twin | `embodied-olympics-fun-shot-put-i00-standard` |
 | Simulator / robot | `mujoco` / `unitree-h1-2` |
 | Family / instance | `shot_put` / seed 0 |
-| Oracle | `full` — Reference: a standing put from a technique found offline by CMA-ES over whole-body key poses (Embodied Olympics' method, search_technique.py): 8.1 m/s from 1.78 m, pushed (0.997), 8.20 m (the line is 6 m), then out of the rear half and standing. Open loop on the frozen start, not robust. Referee test: positive by injection; negatives: the shot lowered, taken behind the shoulders, a sling, the other hand, out early, toes on the board, outside the sector, short, a front-half exit Measured (make_oracles.py): success after 6.08 s of the 60 s limit, live and in a fresh replay, ending in the same state. |
+| Oracle | `full` — Reference: a standing put from a technique found offline by CMA-ES over whole-body key poses (Embodied Olympics' method): 8.1 m/s from 1.78 m, pushed (0.997), 8.20 m (the line is 6 m), then out of the rear half and standing. Open loop on the frozen start, not robust. Referee test: positive by injection; negatives: the shot lowered, taken behind the shoulders, a sling, the other hand, out early, toes on the board, outside the sector, short, a front-half exit Measured: success after 6.08 s of the 60 s limit, live and in a fresh replay, ending in the same state. |
 | Agent time budget | 7200 s; tokens: protocol default (PROTOCOL §5) |
 | Base image | `ghcr.io/mll-lab-nu/efe:embodied-olympics-fun-0.2.1` |
 
@@ -18,7 +18,7 @@ Put the shot that your right hand holds at your neck, from the shoulder with tha
 The shot weighs 7.26 kg and the H1-2's arm motors give 40 N m at the shoulder and 18 N m at the elbow: the arm alone cannot push it fast, so the legs and the trunk have to drive the put, inside a circle two steps wide. 6.0 m needs a release near 7 m/s at about 40 degrees. The stance you start in is not in balance under the shot: held as it is in `stand` mode the robot topples forward within about 4.5 s, so the put (or a counter-lean) has to begin at once.
 
 ## Reference solution
-`solution/oracle.py` drives the robot through the task's own tooling, closed loop on the privileged state, and writes the trajectory (`solution/solve.sh`). Reference: a standing put from a technique found offline by CMA-ES over whole-body key poses (Embodied Olympics' method, search_technique.py): 8.1 m/s from 1.78 m, pushed (0.997), 8.20 m (the line is 6 m), then out of the rear half and standing. Open loop on the frozen start, not robust. Referee test: positive by injection; negatives: the shot lowered, taken behind the shoulders, a sling, the other hand, out early, toes on the board, outside the sector, short, a front-half exit Measured (make_oracles.py): success after 6.08 s of the 60 s limit, live and in a fresh replay, ending in the same state.
+`solution/oracle.py` drives the robot through the task's own tooling, closed loop on the privileged state, and writes the trajectory (`solution/solve.sh`). Reference: a standing put from a technique found offline by CMA-ES over whole-body key poses (Embodied Olympics' method): 8.1 m/s from 1.78 m, pushed (0.997), 8.20 m (the line is 6 m), then out of the rear half and standing. Open loop on the frozen start, not robust. Referee test: positive by injection; negatives: the shot lowered, taken behind the shoulders, a sling, the other hand, out early, toes on the board, outside the sector, short, a front-half exit Measured: success after 6.08 s of the 60 s limit, live and in a fresh replay, ending in the same state.
 
 ## Verification
 `/tests/grade.py` replays `/app/output/trajectory.npz` from the frozen start in two fresh processes (`rcb_rfo.py replay`:
@@ -35,7 +35,7 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | GPU memory | 0 GB | 0 GB |
 
 - GPU: not needed.
-- Measured: author estimate (4090-ws1, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
+- Measured: author estimate (an RTX 4090 workstation, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
 - Limits in the agent phase (docs/protocol/README.md §2.10; `[metadata.resources.limits]`, shown to the agent in `instruction.md`; always measured and reported, and exceeding one fails the trial only when the run sets `RCB_LIMITS_ENFORCE=1`), every container of the trial: no GPU, 13 GiB memory, 512 processes, 20 GiB of new files under `/app`, `/tmp`, `/root`; 60 s within 120 s. Expected peak of the whole trial: 0 GiB GPU memory, 13 GiB memory. Limits measured: author estimate: no trials yet; memory under the 16 GiB cap by the margin the monitor needs (an agent may run several worlds at once or train a controller); disk 20 GiB for downloaded tools and controllers; processes 512: design default.
 
 ## Details

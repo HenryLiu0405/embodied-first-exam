@@ -7,7 +7,7 @@
 | Twin | `embodied-olympics-fun-golf-putt-i00-standard` |
 | Simulator / robot | `mujoco` / `unitree-g1` |
 | Family / instance | `golf_putt` / seed 0 |
-| Oracle | `full` — Reference: a pendulum stroke from the shoulder that holes the 3 m putt; 16 of 16 perturbed runs when it was written. The hole takes a centred ball up to 1.48 m/s. Measured (make_oracles.py): success after 17.18 s of the 30 s limit, live and in a fresh replay, ending in the same state. |
+| Oracle | `full` — Reference: a pendulum stroke from the shoulder that holes the 3 m putt; 16 of 16 perturbed runs when it was written. The hole takes a centred ball up to 1.48 m/s. Measured: success after 17.18 s of the 30 s limit, live and in a fresh replay, ending in the same state. |
 | Agent time budget | 7200 s; tokens: protocol default (PROTOCOL §5) |
 | Base image | `ghcr.io/mll-lab-nu/efe:embodied-olympics-fun-0.2.1` |
 
@@ -18,7 +18,7 @@ Hole the 3.0 m putt: with one stroke of the putter in your right hand, roll the 
 The hole is two and a half ball widths across and three metres away: the ball must start within about one degree of the line and at a speed between the one that just reaches the hole and the one that jumps it, and there is no second stroke. The club is an adult's, long and heavy for this robot's wrist, and it has to be brought from where it starts to an address beside the ball first.
 
 ## Reference solution
-`solution/oracle.py` drives the robot through the task's own tooling, closed loop on the privileged state, and writes the trajectory (`solution/solve.sh`). Reference: a pendulum stroke from the shoulder that holes the 3 m putt; 16 of 16 perturbed runs when it was written. The hole takes a centred ball up to 1.48 m/s. Measured (make_oracles.py): success after 17.18 s of the 30 s limit, live and in a fresh replay, ending in the same state.
+`solution/oracle.py` drives the robot through the task's own tooling, closed loop on the privileged state, and writes the trajectory (`solution/solve.sh`). Reference: a pendulum stroke from the shoulder that holes the 3 m putt; 16 of 16 perturbed runs when it was written. The hole takes a centred ball up to 1.48 m/s. Measured: success after 17.18 s of the 30 s limit, live and in a fresh replay, ending in the same state.
 
 ## Verification
 `/tests/grade.py` replays `/app/output/trajectory.npz` from the frozen start in two fresh processes (`rcb_rfo.py replay`:
@@ -35,7 +35,7 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | GPU memory | 0 GB | 0 GB |
 
 - GPU: not needed.
-- Measured: author estimate (4090-ws1, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
+- Measured: author estimate (an RTX 4090 workstation, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
 - Limits in the agent phase (docs/protocol/README.md §2.10; `[metadata.resources.limits]`, shown to the agent in `instruction.md`; always measured and reported, and exceeding one fails the trial only when the run sets `RCB_LIMITS_ENFORCE=1`), every container of the trial: no GPU, 13 GiB memory, 512 processes, 20 GiB of new files under `/app`, `/tmp`, `/root`; 60 s within 120 s. Expected peak of the whole trial: 0 GiB GPU memory, 13 GiB memory. Limits measured: author estimate: no trials yet; memory under the 16 GiB cap by the margin the monitor needs (an agent may run several worlds at once or train a controller); disk 20 GiB for downloaded tools and controllers; processes 512: design default.
 
 ## Details

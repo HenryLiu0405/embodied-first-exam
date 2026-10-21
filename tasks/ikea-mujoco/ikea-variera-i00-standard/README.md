@@ -25,7 +25,7 @@ time).
 ## Reference solution
 `solution/solve.sh` runs `solution/oracle_replay.py`: it submits the control steps of `solution/oracle_actions.npz` through
 the client as `joint_position` chunks of 10 s, `hold`, one control step per row, as float64 (the client's transport;
-`Robot.submit` sends float32), so the service executes exactly those rows. The rows are the privileged twin's reference trajectory brought within the joint-speed rule by `scripts/ikea_mujoco/standard/std_reference.py` (`make --method centred`: target glitches of one to a few control steps, which the servos never followed, replaced by the running median (361 rows); then every row keeps its time: per arm joint the mean of a forward and a backward slew-limited pass, so a move faster than the limits starts a little earlier and ends a little later, centred on the original (231903 control steps; largest target deviation 0.076936 rad)),
+`Robot.submit` sends float32), so the service executes exactly those rows. The rows are the privileged twin's reference trajectory brought within the joint-speed rule (method `centred`: target glitches of one to a few control steps, which the servos never followed, replaced by the running median (361 rows); then every row keeps its time: per arm joint the mean of a forward and a backward slew-limited pass, so a move faster than the limits starts a little earlier and ends a little later, centred on the original (231903 control steps; largest target deviation 0.076936 rad)),
 so the service's speed limiter never has to act (`n_clipped` 0).
 
 ## Verification
@@ -38,9 +38,9 @@ success or at a breakdown, and journals every executed control step; at the end 
 episode that ends otherwise (timeout) is judged as it stands by the same two checks. Before the episode the service checks
 the scene file by file against `runtime_binding.json` and by its initial-state hash (`instance_mismatch`, infrastructure).
 The verifier (`tests/grade.py`, separate sandbox, no network, the shared client base) transcribes `final.json`: pass iff
-the live episode succeeded (`graded_by_live` 1, `replays` 0). No grading replay runs (owner, 2026-10-17, board 0151).
+the live episode succeeded (`graded_by_live` 1, `replays` 0). No grading replay runs (owner, 2026-10-17).
 
-Before 2026-10-17 (graded then by the verifier's two replays; history, not re-run since): Harbor checks on ws2 (4090-ws2: Ryzen 9 7950X, RTX 4090; shared, loaded) (oracle), ws3 (nop), Harbor 0.23.0, image 0.3.0 sha256:ed950d079b63 / -sim 0f58155b6238 (prisms, EPA-patched MuJoCo, arm clamp, live settled verdict); the live, replay and settled hashes equal the 0.2.0 run's (2026-10-16): `oracle` scored 1 (image -sim 0.3.0 (EGL): live settled success at control step 231903 (58 calls), both replays pass final_check() and end in the live state (live_matches_replay 1, deterministic 1); live service time 4365 s, verifier replays 3251 s); `oracle` scored void (re-run pending) (sim 0.4.0 (Nyx), ws: live settled success at control step 231903, live end hash 2cf43598… = the 0.3.0 run's; the verifier's result is void (an I/O stall on the host; infrastructure, neither pass nor fail); a re-run on ws2 is pending. Nyx leaves the live state hashes bit-identical to EGL over the first 2000 ticks); `nop` scored 0.
+Before 2026-10-17 (graded then by the verifier's two replays; history, not re-run since): Harbor checks on workstation B (Ryzen 9 7950X, RTX 4090; shared, loaded) (oracle), workstation C (nop), Harbor 0.23.0, image 0.3.0 sha256:ed950d079b63 / -sim 0f58155b6238 (prisms, EPA-patched MuJoCo, arm clamp, live settled verdict); the live, replay and settled hashes equal the 0.2.0 run's (2026-10-16): `oracle` scored 1 (image -sim 0.3.0 (EGL): live settled success at control step 231903 (58 calls), both replays pass final_check() and end in the live state (live_matches_replay 1, deterministic 1); live service time 4365 s, verifier replays 3251 s); `oracle` scored void (re-run pending) (sim 0.4.0 (Nyx), workstation A: live settled success at control step 231903, live end hash 2cf43598… = the 0.3.0 run's; the verifier's result is void (an I/O stall on the host; infrastructure, neither pass nor fail); a re-run on workstation B is pending. Nyx leaves the live state hashes bit-identical to EGL over the first 2000 ticks); `nop` scored 0.
 
 ## Compute resources
 Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.resources]` in `task.toml`). The agent phase counts every container of the trial at once (the agent's, and in standard modes the simulator sidecar); the verifier phase runs after it.
@@ -75,7 +75,7 @@ episode with reason `timeout` when it runs out; that count never runs out before
 ### Deviations
 - `ee_pose` is not offered (only `joint_position`, the scene's actuator layout); `/kinematics` gives FK / IK.
 - Graded by the live episode (the settled check on the live simulator); no grading replay, in the sidecar or the
-  verifier (owner, 2026-10-17, board 0150/0151).
+  verifier (owner, 2026-10-17).
 
 ### Goal
 Assemble the VARIERA shelf insert: place the two side frames, lower the shelf onto them, and drive the four screws through the shelf holes into the frames' receivers until they seat.

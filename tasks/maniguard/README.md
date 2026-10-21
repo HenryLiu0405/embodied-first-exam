@@ -11,39 +11,49 @@ standard twin `maniguard-<family>-i<NN>-standard` (`eai-standard/2.2`), NN = the
 ```bash
 harbor run -d embodied-first-exam@all -p tasks/maniguard -a codex -m openai/gpt-6-astra
 ```
-Some images are not on a public registry: build them first ([Getting the images](#getting-the-images)).
+Read [Before you run](#before-you-run) first: the tasks need a BEHAVIOR-1K 3.7.2 data root that you prepare once, and the first run builds the simulator image (about 20 min on a fast link).
 
-## Getting the images
-
-All ManiGuard tasks (privileged and standard) need the simulator image, which is not on a public registry
-(BEHAVIOR-1K 3.7.2 on NVIDIA Isaac Sim 4.5, which NVIDIA does not allow anyone to redistribute), and a BEHAVIOR-1K 3.7.2 data root on the host. Run every command from the repository root on a Linux x86_64 host with Docker (BuildKit), the NVIDIA Container Toolkit and an RTX-class NVIDIA GPU.
-
-1. Licences: building accepts the NVIDIA Isaac Sim / Omniverse licence and NVIDIA's terms for the Isaac Sim 4.5 wheels
-   (the Dockerfile sets `OMNI_KIT_ACCEPT_EULA=YES`); the key step asks you to accept the BEHAVIOR Data Bundle licence (no
-   redistribution). No account, login or token is needed: every input (Docker Hub `nvidia/cuda`, github.com, pypi.org,
-   pypi.nvidia.com, download.pytorch.org, conda-forge, snapshot.ubuntu.com, NVIDIA's Kit extension CDN, the public Hugging
-   Face datasets `behavior-1k/zipped-datasets` and `IDEAS-Lab-Northwestern/franka-panda-longfinger`) is anonymous.
-   About 50 GB of free disk for the build.
-2. Build the simulator image (the files image is public: the task builds pull it):
-   ```bash
-   docker build -f images/maniguard/Dockerfile -t ghcr.io/mll-lab-nu/efe-private:maniguard-$(cat images/maniguard/VERSION) .
-   ```
-3. The BEHAVIOR Data Bundle key: if you already have one (e.g. `$RCB_BEHAVIOR_DATA/omnigibson.key` from BEHAVIOR-1K), use
-   it; otherwise BEHAVIOR-1K's own code prints the licence, asks you to accept it and installs the key (no GPU needed):
-   ```bash
-   mkdir -p ~/behavior-key
-   docker run --rm -it -e OMNIGIBSON_DATA_PATH=/k -v ~/behavior-key:/k ghcr.io/mll-lab-nu/efe-private:maniguard-$(cat images/maniguard/VERSION) \
-     python -c "from omnigibson.utils import asset_utils as a; a.print_user_agreement(); assert input('Accept? [y/n] ') == 'y'; a.download_key()"
-   ```
-4. Build the data root `RCB_MANIGUARD_DATA` (the members the tasks load, 3.4 GB, every file checked; `--full` for all of it):
-   ```bash
-   export RCB_MANIGUARD_DATA=/path/to/maniguard-data
-   python3 images/maniguard/prep_data.py --root "$RCB_MANIGUARD_DATA" --key ~/behavior-key/omnigibson.key
-   ```
-5. Run (the tasks mount `$RCB_MANIGUARD_DATA` read-only and refuse to start without it):
-   ```bash
-   harbor run -d embodied-first-exam@all -p tasks/maniguard -a codex -m openai/gpt-6-astra
-   ```
+## Before you run
+- **Licences (your decisions).** The simulator image contains NVIDIA Isaac Sim 4.5 / Omniverse Kit, which NVIDIA licenses
+  for use and not for redistribution, so it is not on a public registry: your first run builds it on your machine. That
+  build accepts, on your behalf, the NVIDIA Isaac Sim / Omniverse licence agreement and NVIDIA's terms for the Isaac Sim 4.5
+  wheels on pypi.nvidia.com and for the two Kit extensions from NVIDIA's extension CDN (the recipe sets
+  `OMNI_KIT_ACCEPT_EULA=YES` and `ACCEPT_EULA=Y`). The data step (below) asks you to accept the BEHAVIOR Data Bundle
+  licence (no redistribution). No account, login or token is needed for either.
+- **Host.** Linux x86_64, Docker with BuildKit (the `buildx` plugin) and the NVIDIA Container Toolkit, one RTX-class NVIDIA
+  GPU with a driver Isaac Sim 4.5 supports (ManiGuard verified 580.x and saw startup segfaults with newer drivers; checked
+  here: 580.159 and 580.178.04), one Isaac simulator per 32 GB of host RAM. Blackwell GPUs need another torch build: not
+  supported (Other hosts, below).
+- **Disk.** About 50 GB free for the first build (the image is about 17-26 GB depending on Docker's image store), plus
+  3.4 GB for the data root.
+- **First run: the image builds itself (about 20 min on a fast link).** Harbor builds the simulator image from public sources only (Docker
+  Hub `nvidia/cuda`, snapshot.ubuntu.com, github.com, conda-forge, pypi.org, download.pytorch.org, pypi.nvidia.com, NVIDIA's
+  Kit extension CDN), once per machine: every later ManiGuard task reuses its layers. The tasks allow 90 min for the build
+  (`[environment] build_timeout_sec`); on a slow link raise it with `--environment-build-timeout-multiplier`. Organization
+  members who can read `ghcr.io/mll-lab-nu/efe-private` (`docker login ghcr.io`) pull the prebuilt layers instead (compose
+  `cache_from`); without that access the build prints a warning that it cannot read the cache image and goes on building:
+  expected.
+- **Manual step: the data root `RCB_MANIGUARD_DATA`** (once; the tasks refuse to start without it). From the repository
+  root:
+  1. Build the simulator image ahead of the first run (the same layers Harbor then reuses; organization members may
+     `docker pull ghcr.io/mll-lab-nu/efe-private:maniguard-$(cat images/maniguard/VERSION)` instead):
+     ```bash
+     docker build --target maniguard-base -t ghcr.io/mll-lab-nu/efe-private:maniguard-$(cat images/maniguard/VERSION) \
+       tasks/maniguard/maniguard-jar-transport-i14-privileged/environment
+     ```
+  2. The BEHAVIOR Data Bundle key: if you already have one (e.g. `$RCB_BEHAVIOR_DATA/omnigibson.key` from BEHAVIOR-1K), use
+     it; otherwise BEHAVIOR-1K's own code prints the licence, asks you to accept it and installs the key (no GPU needed):
+     ```bash
+     mkdir -p ~/behavior-key
+     docker run --rm -it -e OMNIGIBSON_DATA_PATH=/k -v ~/behavior-key:/k ghcr.io/mll-lab-nu/efe-private:maniguard-$(cat images/maniguard/VERSION) \
+       python -c "from omnigibson.utils import asset_utils as a; a.print_user_agreement(); assert input('Accept? [y/n] ') == 'y'; a.download_key()"
+     ```
+  3. Build the data root (the members the tasks load, 3.4 GB, every file checked; `--full` for all of it) and export it
+     where you run Harbor:
+     ```bash
+     export RCB_MANIGUARD_DATA=/path/to/maniguard-data
+     python3 images/maniguard/prep_data.py --root "$RCB_MANIGUARD_DATA" --key ~/behavior-key/omnigibson.key
+     ```
 
 30 tasks, 5 per family in all 6 families: the 14 tasks of the hard shortlist with a `full` oracle
 (below), and 16 tasks added for variety with `oracle = "none"` (second table). Run on an RTX 4090 Laptop GPU and an RTX
@@ -60,7 +70,7 @@ cannot hold under the handle arch; replaced by `lid_transport/task_0007`). The o
 |---|---|---|---|
 | `maniguard-jar-transport-i14` | `jar_transport/task_0014` | `5d235d1b51a76116` | 599 |
 | `maniguard-cabinet-pickup-i19` | `cabinet_pickup/task_0019` | `d2191aa0e0587eb3` | 2240 |
-| `maniguard-dusty-transfer-i03` | `dusty_transfer/task_0003` | `885424f9128af320` | 946 |
+| `maniguard-dusty-transfer-i03` | `dusty_transfer/task_0003` | `885424f9128af320` | 948 |
 | `maniguard-stack-retrieve-i21` | `stack_retrieve/task_0021` | `188ff9254232eb3f` | 1474 |
 | `maniguard-dusty-transfer-i24` | `dusty_transfer/task_0024` | `547e404cadce1203` | 972 |
 | `maniguard-stack-retrieve-i10` | `stack_retrieve/task_0010` | `54fd5209a5c360c5` | 1560 |
@@ -99,8 +109,8 @@ never copied into the task and not replayed here.
 | `maniguard-clutter-pickup-i23` | `clutter_pickup/task_0023` | `021f30c779dc2819` | a top-heavy cocktail glass among a 25 cm vase and a wineglass; a raised sphere |
 
 ## Prerequisites (every ManiGuard run)
-- **The image** `ghcr.io/mll-lab-nu/efe-private:maniguard-<images/maniguard/VERSION>`, built on the host
-  (BUILD_ONLY: NVIDIA Isaac Sim 4.5 inside). `images/maniguard/` has the recipe: BEHAVIOR-1K v3.7.2 installed the way its
+- **The image** `ghcr.io/mll-lab-nu/efe-private:maniguard-<images/maniguard/VERSION>`, which every task builds from
+  public sources when it cannot pull it (BUILD_ONLY: NVIDIA Isaac Sim 4.5 inside). `images/maniguard/` has the recipe: BEHAVIOR-1K v3.7.2 installed the way its
   own `setup.sh --new-env --omnigibson --bddl` does (Python 3.10, torch 2.6.0+cu124, the 26 Isaac Sim 4.5.0.0 wheels,
   sha256-checked), Spot 2.16 from conda-forge, PyAV from PyPI (conda-forge's ffmpeg brings a Vulkan loader and libglvnd
   that crash Isaac's renderer), g++ for OmniGibson's `torch.compile`, and ManiGuard's evaluator at `a1b6444b3` (its import
@@ -124,7 +134,7 @@ never copied into the task and not replayed here.
 - Every task dir (both modes) carries the tooling (`environment/rcb_maniguard.py`), the task's instance files in
   `environment/instance/` (ManiGuard-Bench's `scene_ep1.json` + `diagnostics.jsonl` at revision `af09438ceb`, unchanged,
   CC BY-NC 4.0 per the `NOTICE` next to them, and our `instance.json`, made with `rcb_maniguard.py make-instance`), and the
-  privileged task its reference solution (`solution/oracle_trajectory.npz`, `oracle_gen.py`). Every text that is in the
+  privileged task its reference solution (`solution/oracle_trajectory.npz`). Every text that is in the
   task files (prompt, goal region and conditions, the LTL specification and its thresholds) is rendered from the instance
   files, so the instruction states what the verifier checks. The task directories are the deliverable; the tooling that
   built them is kept outside this repository.
@@ -225,20 +235,19 @@ state it, and the standard service's `/spec` (`max_control_steps`, `episode`); `
 ## Positive examples (the oracle)
 ManiGuard publishes 40 scripted demonstrations per task (`IDEAS-Lab-Northwestern/datagen-<family>-v1-joint-5cam`, LeRobot,
 30 Hz, CC BY-NC 4.0), recorded by its data generator in a scene built object by object. A privileged task's reference
-trajectory is one of them, time-resampled to the evaluator's 20 Hz: the privileged task's `solution/oracle_gen.py`
-fetches the pinned episode (sha256-checked), reads the generator's commanded joint targets at the midpoint of each control
-step and appends 40 rows holding the last one; `oracle_trajectory.npz` is its output,
-the task README's reference solution its record. The generator re-samples each episode's placements (the sponge, the dust, the cap), so a
+trajectory is one of them, time-resampled to the evaluator's 20 Hz: the privileged task's `solution/oracle_trajectory.npz`
+is the pinned episode (sha256-checked) with the generator's commanded joint targets read at the midpoint of each control
+step and 40 rows appended holding the last one; the task README's reference solution is its record. The generator re-samples each episode's placements (the sponge, the dust, the cap), so a
 demonstration replays only approximately in the frozen scene: per task, its demonstrations are replayed in order until one
 reaches the strict goal (the README says which failed and why). Where none can, the oracle keeps the demonstration and
 redoes the failing step on the tooling: `lid_transport/task_0016`, whose four demonstrations tried never get the cap welded
 to the jug (it falls off when the jug is lifted, though ManiGuard's own evaluator counts them as successes), lowers the cap
-with its attachment point over the jug's until OmniGibson welds it; its `oracle_gen.py` runs in two steps (host resampling,
+with its attachment point over the jug's until OmniGibson welds it; it is built in two steps (host resampling,
 then `rcb_maniguard.py run-oracle` in the image). `lid_transport/task_0007`, whose demonstrations carry the jar by its welded
 lid (the evaluator counts only a grasp of the jar itself as holding it), keeps the demonstration up to the welded lid and
-then takes the jar by its wall and carries it (the same two-step `oracle_gen.py`). `cabinet_pickup/task_0020` and `task_0022`, whose demonstrations
+then takes the jar by its wall and carries it (built in the same two steps). `cabinet_pickup/task_0020` and `task_0022`, whose demonstrations
 push the drawer only just inside the closed tolerance (0.7 mm and 0.06 mm), end that push 2 cm deeper so the drawer
-shuts fully (the same two-step `oracle_gen.py`). Both go to `solution/` only (the oracle agent's mount; the leak check keeps them and the
+shuts fully (built in the same two steps). The trajectories are in `solution/` only (the oracle agent's mount; the leak check keeps them and the
 dataset's name out of everything the agent reads). A task's `oracle` becomes `full` only once Harbor's oracle run scores 1.
 The standard twin's oracle streams the same rows through its service (`solution/oracle_replay.py`: one-second
 `joint_position` chunks, `interpolate="hold"`, one row per control step) and is `full` once Harbor's oracle run of the twin
@@ -359,10 +368,12 @@ with the same locks:
   far). Cabinets 19, 20 and 22, jars 2, 13 and 14 and lids 7, 12 and 16 load to their recorded hashes exactly; dusty 3 and 24
   and stacks 8, 10 and 21 load within the tolerance (`instance_ok`, not `instance_exact`). Every replay on that host is
   deterministic (fresh replays agree with each other and with the live run). 13 of the 14 oracles score 1 and reach their
-  strict goals at the laptop's control steps (dusty 24: step 969 instead of 972); every `nop` scores 0. The exception is
-  dusty 3: its structured state dump differs from the laptop's in two leaves only (the desk's y position by 5.7e-6 m, the
-  tupperware's orientation by about 7e-9), and from that start the laptop-made open-loop oracle (wipe, then pour) misses
-  its strict goal (reward 0 in both modes). The 16 variety tasks were frozen on that host; `nop` spot checks score 0.
+  strict goals at the laptop's control steps (dusty 24: step 969 instead of 972); every `nop` scores 0. Dusty 3 is the
+  sensitive one: its structured state dump differs from the laptop's in two leaves only (the desk's y position by 5.7e-6 m,
+  the tupperware's orientation by about 7e-9), and from that start the demonstration that reaches the goal on the laptop
+  (episode 122) misses it. Its oracle is therefore episode 123, chosen on an RTX 4090 host that also loads the instance
+  within the tolerance (`instance_ok`), where Harbor's oracle runs score 1 in both modes (the task README). The 16 variety
+  tasks were frozen on the RTX PRO 6000 host; `nop` spot checks score 0.
 - **torch.** torch 2.6.0+cu124 has no sm_120 kernels; the dry tasks never use torch on the GPU (no CUDA error anywhere), so
   the tooling, the oracles and the replays run unchanged. GPU-dynamics (liquid) tasks would need a cu128 build.
 - **Rendering.** Isaac Sim 4.5's real-time RTX mode renders heavy per-pixel noise there (mean |Laplacian| of a static camera

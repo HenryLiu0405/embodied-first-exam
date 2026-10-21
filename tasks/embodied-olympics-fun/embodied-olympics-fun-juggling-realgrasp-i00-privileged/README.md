@@ -7,7 +7,7 @@
 | Twin | `embodied-olympics-fun-juggling-realgrasp-i00-standard` |
 | Simulator / robot | `mujoco` / `unitree-g1` |
 | Family / instance | `juggling_realgrasp` / seed 0 |
-| Oracle | `none` — no reference solution; the referee is tested by scripts/embodied-olympics/tests/test_juggling_realgrasp.py: positive by injection after a real drop (the arms roll apart and the ball falls from between the palms; after it the ball is put over the head and each head touch sends it up at 2.6 m/s, one toe touch too); the start squeeze, about 6.6 N per palm, holds the ball 30 s (2.7 mm creep), without it the ball slips out at once; negatives: holding it, the ground, a weak squeeze, held against a forearm, pressed back between the palms (re-grip), a still head, low touches, a hand after the drop, the trunk, a ball resting on the robot; human review in the pull request that adds the benchmark (PROTOCOL §2.7) |
+| Oracle | `none` — no reference solution; the referee is tested: positive by injection after a real drop (the arms roll apart and the ball falls from between the palms; after it the ball is put over the head and each head touch sends it up at 2.6 m/s, one toe touch too); the start squeeze, about 6.6 N per palm, holds the ball 30 s (2.7 mm creep), without it the ball slips out at once; negatives: holding it, the ground, a weak squeeze, held against a forearm, pressed back between the palms (re-grip), a still head, low touches, a hand after the drop, the trunk, a ball resting on the robot; human review in the pull request that adds the benchmark (PROTOCOL §2.7) |
 | Agent time budget | 7200 s; tokens: protocol default (PROTOCOL §5) |
 | Base image | `ghcr.io/mll-lab-nu/efe:embodied-olympics-fun-0.2.1` |
 
@@ -35,7 +35,7 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | GPU memory | 0 GB | 0 GB |
 
 - GPU: not needed.
-- Measured: author estimate (4090-ws1, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
+- Measured: author estimate (an RTX 4090 workstation, 2026-10-11): CPU-only MuJoCo with OSMesa rendering; one world steps 5 times faster than real time on one core and holds about 0.4 GB; the verifier runs two replays and a filmed one
 - Limits in the agent phase (docs/protocol/README.md §2.10; `[metadata.resources.limits]`, shown to the agent in `instruction.md`; always measured and reported, and exceeding one fails the trial only when the run sets `RCB_LIMITS_ENFORCE=1`), every container of the trial: no GPU, 13 GiB memory, 512 processes, 20 GiB of new files under `/app`, `/tmp`, `/root`; 60 s within 120 s. Expected peak of the whole trial: 0 GiB GPU memory, 13 GiB memory. Limits measured: author estimate: no trials yet; memory under the 16 GiB cap by the margin the monitor needs (an agent may run several worlds at once or train a controller); disk 20 GiB for downloaded tools and controllers; processes 512: design default.
 
 ## Details
