@@ -15,15 +15,15 @@ to your left, +z is up; the floor is z = 0.
 ## The rules
 **Rule book:** World Athletics Competition and Technical Rules, 2024 edition: TR 26 (26.3-26.7 the uprights 4.00 to 4.04 m apart, the 4.00 m bar of at most 2 kg and 30 mm diameter on flat supports 4 cm wide and 6 cm long, 1 cm clear of the uprights), TR 27.1 (the take-off from one foot), TR 27.2 (failures: the bar does not remain on the supports; touching the ground or the landing area beyond the plane of the bar's nearer edge without first clearing the bar), TR 27.3 (a runway of at least 15 m), TR 27.10 (a landing area of at least 6 m x 4 m x 0.7 m), TR 25.17 (one minute for a trial). Where this task departs from it:
 
-- TR 27.1 (one foot) is judged by a number: in the last 0.05 s before the lift-off of the jump's flight only one foot touches the ground, and nothing else does
-- TR 27.2(b) is judged geometrically: before the jump's flight nothing of the robot may touch the ground or the mat beyond the plane; the robot's pelvis and feet (the ankle joints) must pass the plane between the uprights and above the height of the bar's upper side; the bar is cleared when every part of the robot is beyond the plane
-- TR 27.2(a): the bar is judged 2.0 s after the clearance and the landing; it is off its supports when its centre is more than 0.05 m below its resting height
-- TR 27.10 (the landing area): the mat is a box with a soft, overdamped contact (time constant 0.08 s, full stiffness only 0.1 m deep), not a foam body; it is 0.1 m behind the bar's plane
+- TR 27.1 ("The athlete shall take off from one foot") is judged on the ground's forces, after every 1 ms physics step: during the last 0.15 s before the lift-off of the jump's flight the other (free) foot's ground force stays below 0.05 of the robot's weight, or the free foot is off the ground for the whole of the take-off foot's last ground contact; nothing else of the robot touches the ground in that time (or in that contact); a break of at most 0.03 s in a foot's contact is not a new contact. A staggered two-foot push, with the free foot leaving just before the lift-off, is a take-off from both feet
+- TR 27.2(b) is judged geometrically, in one flight: the robot's pelvis and feet (the ankle joints) must pass the plane between the uprights and above the height of the bar's upper side, and every part of the robot must get beyond the plane, all in the same flight (from the take-off to the first contact with anything but the bar); a crossing made while touching the ground or the mat, or after a landing, never counts; any contact with the ground or the mat beyond the plane before that clearance is the rule's failure; the rule's allowance for a foot that touches the landing area without advantage is not used
+- TR 27.2(a) (the bar does not remain on the supports): judged 2.0 s after the clearance and the landing, the bar must lie on its supports: touching both, its centre within half a support's width (0.04/2 m) of its resting place along the runway and within 0.005 m of its resting height, and at rest (its centre slower than 0.05 m/s, turning slower than 0.5 rad/s); at any time before, it is off its supports when its centre is more than 0.05 m below its resting height
+- TR 27.10 (the landing area): the mat is one box whose contact follows soft polyurethane foam (about 5 kPa at 25 % compression, then a plateau: a body landing at 4 m/s sinks about 0.4 m and does not bounce back); MuJoCo's contact fitted to it on this robot: a time constant of 0.8 s, damping ratio 1.0, an impedance falling from 0.4 to 0.05 over 0.08 m, friction 1.0; the foam does not spring back after the landing, and its shock absorption is not a certified one (the rule book sets only the size); it begins 0.1 m behind the bar's plane
 - the bar is rigid (no sag); no wind; the athlete alone, one trial at one height, 1.0 m (FAMILIES.md: a school competition's opening height; the men's world record is 2.45 m)
-- TR 27 does not define a jump; here its flight lasts at least 0.05 s and raises the pelvis at least 0.05 m above its height at lift-off
-- the bar is rigid and its supports are fixed, so unlike a real bar it would carry a body: touching it is allowed, as in the rules, but contact with it for more than 0.3 s in all is a failure (a real bar sags and falls under any weight); a pelvis or a foot that comes back over the plane has not passed it
+- TR 27 does not define a jump; here its flight lasts at least 0.05 s and raises the pelvis at least 0.08 m above its height at lift-off (a fall from a stand raises it by nothing); the number is kept within this robot's reach: an open-loop two-foot squat jump leaves the ground at about 1.8 m/s (0.17 m of rise); a one-foot take-off of an agent's own on the declared H2-class legs (2.5 kW, 295 N m per joint) left the ground at 2.78 m/s (0.39 m of rise of the centre of mass)
+- the bar is rigid and its supports are fixed, so unlike a real bar it would carry a body: touching it is allowed, as in the rules, but contact with it for more than 0.3 s in all is a failure, and so is a push from it: the normal impulse of the bar on the robot, summed over the attempt, may be at most 2.0 N s (a real bar sags and falls under any weight; a free 2 kg bar given that much momentum across its 4 cm supports slides off them, and here one already leaves them at about 0.7 N s; on the 67 kg robot it is 0.03 m/s); a pelvis or a foot that comes back over the plane has not passed it
 
-World Athletics rules for the high jump. The bar (4.0 m long, 0.03 m thick, 2.0 kg) rests with its upper side 1.0 m above the ground on two flat supports (0.04 m wide, 0.06 m long) that face each other from two uprights 4.02 m apart; pushed more than half a support's width forwards or backwards, or lifted, it falls. The bar lies across y in the plane x = 0; the plane the rules mean is that of its nearer edge, x = -0.03/2. Behind it lies the landing mat: 6.0 m wide, 4.0 m deep, 0.7 m high, soft, beginning 0.1 m behind that plane. The approach is free (any direction, any distance on the 15.0 m of level runway). A flight is a time of at least 0.05 s in which nothing of you touches anything but the bar. Your jump is the flight in which your pelvis crosses the bar's plane or which ends with your first contact beyond the plane. Its take-off must be from one foot: in the last 0.05 s before lift-off only one foot touches the ground and nothing else of you does; and in it your pelvis must rise at least 0.05 m above its height at lift-off. Before your jump nothing of you may touch the ground or the mat beyond the plane. Your pelvis and both feet (the ankle joints) must cross the plane between the uprights and higher than the bar's upper side; one that comes back over the plane has not passed it and must pass it again. You have cleared the bar when every part of you is beyond the plane; from the landing until then nothing of you may touch the ground on the take-off side. You may touch the bar, for at most 0.3 s in all (it does not carry you), and you may land on any part of your body, on the mat or not. You succeed when you have cleared the bar and landed, and 2.0 s later the bar is still on its supports. A fall is not a failure by itself. You fail if the bar drops more than 0.05 m at any time; if you are in contact with the bar for more than 0.3 s in all; if you touch the ground or the mat beyond the plane without a jump; if the take-off is not from one foot; if the flight is not a jump; if your pelvis or a foot passes the plane outside the uprights or not higher than the bar; if you touch the ground on the take-off side after the landing before you have cleared the bar; or after 60 s (the time allowed for a trial).
+World Athletics rules for the high jump. The bar (4.0 m long, 0.03 m thick, 2.0 kg) rests with its upper side 1.0 m above the ground on two flat supports (0.04 m wide, 0.06 m long) that face each other from two uprights 4.02 m apart; pushed more than half a support's width forwards or backwards, or lifted, it falls. The bar lies across y in the plane x = 0; the plane the rules mean is that of its nearer edge, x = -0.03/2. Behind it lies the landing mat: 6.0 m wide, 4.0 m deep, 0.7 m high, soft, beginning 0.1 m behind that plane. The approach is free (any direction, any distance on the 15.0 m of level runway). A flight is a time of at least 0.05 s in which nothing of you touches anything but the bar. Your jump is the flight in which your pelvis crosses the bar's plane. Its take-off must be from one foot: in the last 0.15 s before lift-off your other foot presses on the ground with less than 0.05 of your weight (or it is off the ground for the whole of the take-off foot's last ground contact), and nothing else of you touches the ground; and in it your pelvis must rise at least 0.08 m above its height at lift-off. The clearance is judged in that one flight, between the take-off and your first contact with anything but the bar: your pelvis and both feet (the ankle joints) must cross the plane between the uprights and higher than the bar's upper side (one that comes back over the plane has not passed it and must pass it again), and every part of you must get beyond the plane. A crossing made while you touch the ground or the mat, or after the flight has ended, never counts. You have cleared the bar when all of that has happened in the flight. You may touch the bar, for at most 0.3 s in all, and it may push you with a normal impulse of at most 2.0 N s in all (a real bar falls under any weight: it does not carry you or throw you up), and after the clearance you may land on any part of your body, on the mat or not. You succeed when you have cleared the bar and landed, and 2.0 s later the bar still lies on its supports: touching both, its centre within half a support's width of its resting place along x and within 0.005 m of its resting height, and at rest (its centre slower than 0.05 m/s, turning slower than 0.5 rad/s); a bar knocked up or off counts as off. A fall is not a failure by itself. You fail if the bar drops more than 0.05 m at any time, or is not lying on its supports at that judgement; if you are in contact with the bar for more than 0.3 s in all, or it pushes you with more than 2.0 N s; if you touch the ground or the mat beyond the plane before you have cleared the bar, with or without a jump; if your jump's flight ends (you touch anything but the bar) before you have cleared the bar; if the take-off is not from one foot; if the flight is not a jump; if your pelvis or a foot passes the plane outside the uprights or not higher than the bar; if your landing after the clearance touches the ground on the take-off side; or after 60 s (the time allowed for a trial).
 
 A referee decides this from the simulator's state after every physics step (1 ms): the events that must happen, in
 order, are **take-off → clearance → bar stays**. The attempt ends at the success (that moment is the success), at the first rule violation,
@@ -89,31 +89,31 @@ Joint order everywhere (Unitree's SDK order), with each joint's range, speed lim
 
 | # | joint | range (rad) | speed (rad/s) | torque (N m) | kp | kd | at the start (rad) |
 |---|---|---|---|---|---|---|---|
-| 0 | `left_hip_yaw` | [-0.43, 0.43] | 23 | 200 | 800 | 10 | 0 |
-| 1 | `left_hip_pitch` | [-3.14, 2.5] | 23 | 200 | 800 | 10 | -0.16 |
-| 2 | `left_hip_roll` | [-0.43, 3.14] | 23 | 200 | 800 | 10 | 0 |
-| 3 | `left_knee` | [-0.26, 2.05] | 14 | 300 | 1200 | 16 | 0.36 |
-| 4 | `left_ankle_pitch` | [-0.8973, 0.5236] | 9 | 60 | 160 | 8 | -0.2 |
+| 0 | `left_hip_yaw` | [-0.43, 0.43] | 23 | 360 | 800 | 10 | 0 |
+| 1 | `left_hip_pitch` | [-3.14, 2.5] | 23 | 360 | 800 | 10 | -0.16 |
+| 2 | `left_hip_roll` | [-0.43, 3.14] | 23 | 360 | 800 | 10 | 0 |
+| 3 | `left_knee` | [-0.26, 2.05] | 14 | 360 | 1200 | 16 | 0.36 |
+| 4 | `left_ankle_pitch` | [-0.8973, 0.5236] | 9 | 66.88 | 160 | 8 | -0.2 |
 | 5 | `left_ankle_roll` | [-0.2618, 0.2618] | 9 | 40 | 160 | 8 | 0 |
-| 6 | `right_hip_yaw` | [-0.43, 0.43] | 23 | 200 | 800 | 10 | 0 |
-| 7 | `right_hip_pitch` | [-3.14, 2.5] | 23 | 200 | 800 | 10 | -0.16 |
-| 8 | `right_hip_roll` | [-3.14, 0.43] | 23 | 200 | 800 | 10 | 0 |
-| 9 | `right_knee` | [-0.26, 2.05] | 14 | 300 | 1200 | 16 | 0.36 |
-| 10 | `right_ankle_pitch` | [-0.8973, 0.5236] | 9 | 60 | 160 | 8 | -0.2 |
+| 6 | `right_hip_yaw` | [-0.43, 0.43] | 23 | 360 | 800 | 10 | 0 |
+| 7 | `right_hip_pitch` | [-3.14, 2.5] | 23 | 360 | 800 | 10 | -0.16 |
+| 8 | `right_hip_roll` | [-3.14, 0.43] | 23 | 360 | 800 | 10 | 0 |
+| 9 | `right_knee` | [-0.26, 2.05] | 14 | 360 | 1200 | 16 | 0.36 |
+| 10 | `right_ankle_pitch` | [-0.8973, 0.5236] | 9 | 66.88 | 160 | 8 | -0.2 |
 | 11 | `right_ankle_roll` | [-0.2618, 0.2618] | 9 | 40 | 160 | 8 | 0 |
 | 12 | `torso` | [-2.35, 2.35] | 23 | 200 | 600 | 15 | 0 |
-| 13 | `left_shoulder_pitch` | [-3.14, 1.57] | 9 | 40 | 300 | 6 | 0 |
-| 14 | `left_shoulder_roll` | [-0.38, 3.4] | 9 | 40 | 300 | 6 | 0 |
-| 15 | `left_shoulder_yaw` | [-2.66, 3.01] | 20 | 18 | 200 | 4 | 0 |
-| 16 | `left_elbow_pitch` | [-0.95, 3.18] | 20 | 18 | 200 | 4 | 0 |
-| 17 | `left_elbow_roll` | [-3.01, 2.75] | 31.4 | 19 | 80 | 1.5 | 0 |
+| 13 | `left_shoulder_pitch` | [-3.14, 1.57] | 9 | 130 | 300 | 6 | 0 |
+| 14 | `left_shoulder_roll` | [-0.38, 3.4] | 9 | 60 | 300 | 6 | 0 |
+| 15 | `left_shoulder_yaw` | [-2.66, 3.01] | 20 | 60 | 200 | 4 | 0 |
+| 16 | `left_elbow_pitch` | [-0.95, 3.18] | 20 | 60 | 200 | 4 | 0 |
+| 17 | `left_elbow_roll` | [-3.01, 2.75] | 31.4 | 60 | 80 | 1.5 | 0 |
 | 18 | `left_wrist_pitch` | [-0.47, 0.47] | 31.4 | 19 | 60 | 1 | 0 |
 | 19 | `left_wrist_yaw` | [-1.27, 1.27] | 31.4 | 19 | 60 | 1 | 0 |
-| 20 | `right_shoulder_pitch` | [-3.14, 1.57] | 9 | 40 | 300 | 6 | 0 |
-| 21 | `right_shoulder_roll` | [-3.4, 0.38] | 9 | 40 | 300 | 6 | 0 |
-| 22 | `right_shoulder_yaw` | [-3.01, 2.66] | 20 | 18 | 200 | 4 | 0 |
-| 23 | `right_elbow_pitch` | [-0.95, 3.18] | 20 | 18 | 200 | 4 | 0 |
-| 24 | `right_elbow_roll` | [-2.75, 3.01] | 31.4 | 19 | 80 | 1.5 | 0 |
+| 20 | `right_shoulder_pitch` | [-3.14, 1.57] | 9 | 130 | 300 | 6 | 0 |
+| 21 | `right_shoulder_roll` | [-3.4, 0.38] | 9 | 60 | 300 | 6 | 0 |
+| 22 | `right_shoulder_yaw` | [-3.01, 2.66] | 20 | 60 | 200 | 4 | 0 |
+| 23 | `right_elbow_pitch` | [-0.95, 3.18] | 20 | 60 | 200 | 4 | 0 |
+| 24 | `right_elbow_roll` | [-2.75, 3.01] | 31.4 | 60 | 80 | 1.5 | 0 |
 | 25 | `right_wrist_pitch` | [-0.47, 0.47] | 31.4 | 19 | 60 | 1 | 0 |
 | 26 | `right_wrist_yaw` | [-1.27, 1.27] | 31.4 | 19 | 60 | 1 | 0 |
 
@@ -139,11 +139,7 @@ What the platform does and does not do for you:
   what bounds the joint itself is the motor's torque-speed curve (a `lowcmd` feed-forward torque can turn a joint up to
   about 1.15 times that speed, where the motor's torque has fallen to zero).
 - **The hands** have no working fingers here; each carries a fist pad (a box of 4.4 × 8 × 10 cm beyond the wrist, the
-  10 cm along the forearm) with a grip: while `grip_left` / `grip_right` ≥ 0.5 the hand holds the nearest grippable
-  object whose surface is within 3.5 cm of the palm point (the middle of the pad, 4.5 cm beyond the wrist flange along
-  the forearm) and that moves at most 6 m/s relative to it; below 0.5 it lets go at once. Since the palm point is inside
-  the pad, an object can be gripped where it touches one of the pad's two broad faces, not at its narrow sides or its
-  far end. What is grippable is the task's own equipment, named in the rules.
+  10 cm along the forearm). Nothing in this task is grippable: `grip_left` and `grip_right` have no effect.
 - **A tool on a hand** (a racket, a paddle, a club; where the task has one) is fixed to the wrist in place of the pad.
   It collides with the world, the ball and the rest of your own body.
 - **The air** is real: balls and implements feel drag and, when they spin, lift.

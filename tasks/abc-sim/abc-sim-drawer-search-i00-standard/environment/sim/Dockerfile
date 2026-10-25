@@ -3,7 +3,7 @@
 # the shared 2.2 layer from the pinned files-only image. .dockerignore keeps the build's own two files out of /srv.
 FROM ghcr.io/mll-lab-nu/efe:abc-sim-0.1.0
 COPY . /srv/
-COPY --from=ghcr.io/mll-lab-nu/efe:standard-sim-files-0.1.1@sha256:d9a4e130a67056d0fb47594562ac303b2f000c5f48fbe5ec235593bef0f3543f \
+COPY --from=ghcr.io/mll-lab-nu/efe:standard-files-0.3.1@sha256:77cfe73759fc3961ef393bfa6f119d635a29ea905175a12e4001298018ec2e56 \
      /rcb1.py \
      /rcb_limited.py \
      /run.sh \

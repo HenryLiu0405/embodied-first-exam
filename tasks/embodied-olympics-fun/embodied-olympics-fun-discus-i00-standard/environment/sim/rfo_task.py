@@ -1,6 +1,7 @@
-"""Discus throw (World Athletics TR 32 and 34): from the circle, throw the men's discus so that it lands inside the
-sector at least the qualifying mark away; then leave the circle from its rear half. Official circle, sector and discus;
-the Unitree H1-2."""
+"""Discus throw (World Athletics TR 32 and 34): the official circle and sector; the right hand is the H1-2's own Inspire
+five-finger hand (rfo.realhand, "inspire") and holds the men's discus flat on its palm, the fingertips curled over the
+rim, by contact and friction only (it can slip, turn in the hand and fly out early); throw it so that it lands inside the sector at least the qualifying mark away, then leave
+the circle from its rear half. The Unitree H1-2."""
 import math
 
 import mujoco
@@ -8,15 +9,53 @@ import numpy as np
 
 from rfo.scene import HITTABLE, STANDABLE
 from rfo.task import TaskBase
+# A rigid discus (steel rim, wooden body)'s contact with the robot, the venue's fixtures and the other props (the
+# ground keeps its own: rfo/world.py GROUND_SOLMIX): the stiff contact of the core's shells (rfo/world.py
+# SHELL_CONTACT: solref 0.004 s, solimp 0.99 0.999 0.0005, from Embodied Olympics' weightlifting fix, a rigid prop on the
+# robot's aluminium) with a solmix that wins over a default-contact geom; a ball (priority 1) keeps its own bounce.
+# With MuJoCo's default soft contact (solref 0.02 1, solimp 0.9 0.95) it sank 49 mm into the floor and 40 mm into a
+# foot (stress test).
+from rfo.world import SHELL_CONTACT as RIGID  # noqa: E402
 
 APRON, RAMP = 1.0, 1.0                        # the ground outside the circle: level for APRON m, then down to the field
 N_WEDGE = 48
-PALM_OFFSET = 0.022 + 0.003                   # the palm face of the hand's pad, and a gap, from the wrist mount's axis
+# ---- the hold ----
+# The right hand is the H1-2's Inspire hand (rfo/realhand.py). The discus lies flat on its palm (its axis along the
+# palm's normal), the fingers' tips curled over the rim, the forearm level and rolled palm up: a thrower's hold at rest.
+# Measured (the hand closed on it, then held 1.5 s standing): hanging below the hand from the fingers (the arm down)
+# the 2 kg discus slides out of the hand wherever it is placed; on the upturned palm it stays (moved 7 mm).
+ARM_START = dict(right_elbow_roll=1.57)        # the right arm at t = 0: the rest pose (the forearm level, forwards),
+#                                                the forearm rolled palm up: the discus rests on the palm
+DISCUS_IN_HAND_M = (0.0045, -0.06)             # the discus' centre from the hand's grasp centre: out of the palm (its
+#                                                face on the palm), along the fingers (the fingertips curled over the
+#                                                rim; a search: hanging from the fingers it slides out of the hand)
+# ---- end of the hold ----
 # Flight in air: MuJoCo's ellipsoid fluid model on the discus' own ellipsoid. Coefficients (blunt drag, slender drag,
 # angular drag, Kutta lift, Magnus lift) chosen so that the drag coefficient edge-on is 0.08 and the lift coefficient
 # at 10 degrees 0.44 (on the planform area): the order of the published wind-tunnel data (Ganslen 1964); a 25 m/s
 # release at 35 degrees then flies 59 m, a 12 m/s release 16 m (measured in this model).
 FLUID = (0.2, 0.0, 1.5, 0.9, 1.0)
+
+
+# (the same function as javelin.py's)
+def contact_dv(w, prop: np.ndarray, who: np.ndarray, mass: float) -> float:
+    """The size of the velocity change (m/s) that the contacts between the geoms `prop` and `who` gave the prop in the
+    physics step just taken: MuJoCo's contact forces of that step (mj_contactForce, in each contact's frame) summed in
+    the world frame, times the step, over the prop's mass."""
+    d, m = w.d, w.m
+    n = d.ncon
+    if not n:
+        return 0.0
+    g = d.contact.geom[:n]
+    a, b = prop[g[:, 0]] & who[g[:, 1]], prop[g[:, 1]] & who[g[:, 0]]
+    J, f = np.zeros(3), np.zeros(6)
+    for i in np.flatnonzero(a | b):
+        if d.contact.efc_address[i] < 0:
+            continue
+        mujoco.mj_contactForce(m, d, int(i), f)
+        F = d.contact.frame[i].reshape(3, 3).T @ f[:3]
+        J += F if b[i] else -F                    # the force on geom2, along the normal from geom1 to geom2
+    return float(np.linalg.norm(J)) * m.opt.timestep / mass
 
 
 def set_arm(w, **angles) -> None:
@@ -78,16 +117,28 @@ class Task(TaskBase):
                 "events: the start, failures, the landing, leaving the circle, the measurement), TR 34 (the men's "
                 "discus), TR 35 (the discus cage)")
     deviations = [
-        "TR 34 (the discus): the hand holds the discus flat against its palm by a grip switched on and off, not by fingertips "
-        "over the rim; it is released when the grip is switched off. The discus is an ellipsoid of the official "
-        "diameter, thickness and mass (no separate metal rim: its moment of inertia is that of a uniform body).",
+        "TR 34 (the discus; the thrower's hand): the right hand is the H1-2's own Inspire five-finger hand (six "
+        "drives: four fingers, the thumb's flexion and rotation; fingertip forces 20 N, the thumb 30 N, at "
+        "{grip_scale} times these forces; one closure command for the whole hand). The discus lies flat on its "
+        "palm, the fingertips curled over the rim, held by contact and friction only: nothing is welded or grippable, "
+        "and the discus slips, turns in the hand or flies out when the throw pulls harder than the fingers hold. The "
+        "release is the hand's last hold (the discus touching the hand's fingers and its thumb or palm) before it is "
+        "clear of the robot.",
+        "TR 34 (the discus' shape): an ellipsoid of the official diameter, thickness and mass (no separate metal "
+        "rim: its moment of inertia is that of a uniform body; near the rim it is 13 to 19 mm thick, as the rule "
+        "book's rim).",
         "TR 35 (the cage): there is no cage.",
         "TR 32.5-32.6: the ground outside the circle is level with the rim's top for " + f"{APRON:g} m and then falls to "
         f"the field's level over {RAMP:g} m" + " (the circle's inside is the field's level, {rim_height_m} m below the "
         "rim, instead of the field being level with the rim).",
         "TR 32.20: the mark is the point where the discus first touches the ground.",
         "TR 32.15 (interrupting a trial, laying the implement down): not modelled; the first release is the throw, "
-        "and the discus cannot be gripped again.",
+        "and the discus may not be gripped again.",
+        "TR 34 / TR 32 (the throw is the hand's alone): the rule book has no article on touching the discus after it "
+        "has left the hand; here the right hand may still brush it during {retouch_grace_s} s after the release, but "
+        "those touches may change its velocity by at most {retouch_dv_m_s} m/s in all (the sum of their contact "
+        "impulses over its mass): a harder touch is a second propulsion of a released implement, and fails the "
+        "throw.",
         "TR 32.14 names no fall: here a fall ends the trial as a failure, as in every task of this benchmark; the "
         "trial ends when the robot has left the circle correctly and stands.",
         "TR 25.17 (one minute for a trial): the whole trial, leaving the circle included, has {time_limit_s} s.",
@@ -101,38 +152,52 @@ class Task(TaskBase):
     stages = ["release", "landing", "exit"]
     fall_z = 0.50
     params = dict(discus_mass_kg=2.000, discus_diameter_m=0.220, discus_thickness_m=0.045, circle_diameter_m=2.50,
-                  rim_height_m=0.02, rim_edge_m=0.003, sector_deg=34.92, qualifying_mark_m=15.0, retouch_grace_s=0.20, stand_s=1.0,
-                  fall_pelvis_m=0.50)
+                  rim_height_m=0.02, rim_edge_m=0.003, sector_deg=34.92, qualifying_mark_m=15.0, retouch_grace_s=0.20, retouch_dv_m_s=0.5, carry_s=0.20,
+                  release_gap_s=0.03, stand_s=1.0,
+                  fall_pelvis_m=0.50, grip_scale=1.0)
 
-    sentence = ("Throw the discus in your right hand from inside the circle so that it lands inside the sector at "
-                "least {qualifying_mark_m} m from the circle, then leave the circle from its rear half and stand.")
+    sentence = ("Throw the discus that lies on your right palm, your fingers curled over its rim, from inside the circle so that it lands "
+                "inside the sector at least {qualifying_mark_m} m from the circle, then leave the circle from its "
+                "rear half and stand.")
     rules = ("The men's discus ({discus_mass_kg} kg, {discus_diameter_m} m across, {discus_thickness_m} m thick at "
-             "its centre) starts gripped flat against your right palm. The circle is {circle_diameter_m} m across "
-             "inside its rim; the ground outside is {rim_height_m} m higher than its inside. The sector opens from "
-             "the circle's centre, {sector_deg} degrees wide, symmetric about the direction you face at the start. "
-             "The throw: you let go of the discus (once: it cannot be gripped again). Its first touch of the ground "
-             "must be inside the sector lines (on a line is out); the throw is measured from that point to the inside "
-             "of the rim along the line through the circle's centre. You succeed when a valid throw measures at "
-             "least {qualifying_mark_m} m and you have then left the circle correctly and stood for {stand_s} s. "
-             "Leaving correctly: after the discus has landed, your first touch of the rim's top or of the ground "
-             "outside the circle is behind the line through the circle's centre across the throwing direction (the "
-             "rear half). Standing: only your feet on the ground, the torso within about 20 degrees of upright, the "
-             "pelvis slower than 0.35 m/s. You fail if any part of you touches the rim's top (its top inside edge "
-             "included) or the ground outside the circle before the discus has landed, or in the front half before "
-             "you have left correctly; if the discus lands outside the sector or short of {qualifying_mark_m} m; if "
-             "any part of you touches it after the release (your right arm may still brush it during the first "
-             "{retouch_grace_s} s); if you fall (your pelvis lower than {fall_pelvis_m} m above the circle's floor, "
-             "or any part of you other than your feet on the ground); or after {time_limit_s} s. Where you touch the "
-             "ground is judged on the points of contact; a contact within {rim_edge_m} m of the rim's top counts as on "
-             "it.")
+             "its centre) starts flat on the palm of your right hand, the fingertips curled over its rim (the row's "
+             "right grip value is the hand's closure command, 0 open to 1 closed; nothing is welded or grippable: "
+             "contact and friction alone hold it, and it slips, turns or flies out when the throw pulls harder than "
+             "the fingers hold). The circle is {circle_diameter_m} m across inside its rim; the ground outside is "
+             "{rim_height_m} m higher than its inside. The sector opens from the circle's centre, {sector_deg} "
+             "degrees wide, symmetric about the direction you face at the start. Holding: the discus touches the "
+             "right hand's fingers and its thumb or palm. Before the release nothing of you but your right hand (the "
+             "fingers, the palm and the wrist) may touch it, and it may not stay on the hand without the hand's hold "
+             "for more than {carry_s} s. The release is the hand's last hold before the discus has touched nothing "
+             "of you for {release_gap_s} s; there is one release: after it the discus may not be held by the hand "
+             "again, nothing of you but the right hand may touch it, and the right hand only "
+             "during the first {retouch_grace_s} s (brushing it as it leaves), if those touches change its velocity by at "
+             "most {retouch_dv_m_s} m/s in all (the sum of their contact impulses over its mass: the release must be "
+             "clean). Its first touch of the ground must be "
+             "inside the sector lines (on a line is out); the throw is measured from that point to the inside of the "
+             "rim along the line through the circle's centre. You succeed when a valid throw measures at least "
+             "{qualifying_mark_m} m and you have then left the circle correctly and stood for {stand_s} s. Leaving "
+             "correctly: after the discus has landed, your first touch of the rim's top or of the ground outside the "
+             "circle is behind the line through the circle's centre across the throwing direction (the rear half). "
+             "Standing: only your feet on the ground, the torso within about 20 degrees of upright, the pelvis "
+             "slower than 0.35 m/s. You fail if any part of you touches the rim's top (its top inside edge included) "
+             "or the ground outside the circle before the discus has landed, or in the front half before you have "
+             "left correctly; if the discus is touched by anything but the right hand before the release, stays on "
+             "the hand without the hand's hold, is held again or touched after the release (but for the right "
+             "hand's brush); if it lands outside the sector or short of {qualifying_mark_m} m; if you fall (your "
+             "pelvis lower than {fall_pelvis_m} m above the circle's floor, or any part of you other than your feet "
+             "on the ground); or after {time_limit_s} s. Where you touch the ground is judged on the points of "
+             "contact; a contact within {rim_edge_m} m of the rim's top counts as on it.")
     venue = ("You stand in the rear half of the circle facing the sector (+x), your pelvis 0.55 m behind the circle's "
-             "centre. Your right arm hangs straight down, a little away from the leg, the discus flat against its "
-             "palm (the palm faces your leg). There is no cage. Still air. The discus is released when the hand's "
-             "grip is switched off.")
+             "centre. Your right forearm is level and points "
+             "forwards, rolled palm up; the discus lies flat on the palm, the closed hand's fingertips curled over its "
+             "rim. There is no cage. Still air.")
     difficulty = ("{qualifying_mark_m} m needs a release at about 12 m/s near 35 to 40 degrees with the discus flat "
                   "to its flight and spinning, or the air turns it over. The H1-2's arm motors give 40 N m at the "
                   "shoulder, so the speed has to come from the trunk's turn, inside a circle of 2.5 m that the "
-                  "robot may not leave until the discus is down.")
+                  "robot may not leave until the discus is down. At that speed the discus pulls on the hand with some "
+                  "300 N, held only by fingertips curled over its rim and the palm under it: the hand's path has to "
+                  "keep the discus pressed into the palm and the fingers until the release.")
 
     def build(self, sc):
         p = self.p
@@ -145,35 +210,40 @@ class Task(TaskBase):
         sc.geom(b, "discus", type="ellipsoid", size=(p["discus_diameter_m"] / 2, p["discus_diameter_m"] / 2,
                                                      p["discus_thickness_m"] / 2), mass=p["discus_mass_kg"],
                 rgba=(0.75, 0.3, 0.15, 1), friction=(0.7, 0.005, 0.0001), condim=4, fluidshape="ellipsoid",
-                fluidcoef=FLUID, **HITTABLE)
-        sc.grippables["discus"] = {"radius": p["discus_thickness_m"] / 2}
+                fluidcoef=FLUID, **HITTABLE, **RIGID)
+        sc.real_hands["right"] = "inspire"                        # nothing grippable: the hand holds by friction
+        if p["grip_scale"] != 1.0:                                # a declared deviation (the grip-force factor)
+            sc.real_hand_options["right"] = {"grip_scale": float(p["grip_scale"])}
         sc.camera("venue", (-3.0, -3.8, 2.6), (1.5, 0.0, 0.8), fovy=55)
         sc.camera("sector", (-3.0, 0.0, 14.0), (9.0, 0.0, 0.0), fovy=70)
 
     def reset(self, w):
-        set_arm(w, right_elbow_pitch=1.57, right_shoulder_roll=-0.20)
-        d = w.d
-        b = w.robot.mount["right"]
-        R = d.xmat[b].reshape(3, 3)
-        Rb = np.column_stack([R[:, 1], R[:, 2], R[:, 0]])     # the discus' axis: the palm's normal (the mount's x)
+        set_arm(w, **ARM_START)
+        c, R = w.grasp_frame("right")               # x: out of the palm, z: along the fingers, y = z x x
+        Rb = np.column_stack([R[:, 1], R[:, 2], R[:, 0]])     # the discus' axis: the palm's normal (flat on the palm)
         q = np.zeros(4)
         mujoco.mju_mat2Quat(q, Rb.reshape(-1))
-        w.put("discus", d.xpos[b] + R @ np.array([PALM_OFFSET + self.p["discus_thickness_m"] / 2, 0.0, 0.05]), quat=q)
-        w.grab("right", "discus", event=False)
+        w.put("discus", c + R[:, 0] * DISCUS_IN_HAND_M[0] + R[:, 2] * DISCUS_IN_HAND_M[1], quat=q)
+        w.close_on("right", "discus", closure=1.0)
 
     # ------------------------------------------------------------------ the referee
     def referee_reset(self, w, ref):
         self.disc = ref.geoms(body="discus")
         self.robot = ref.part("robot")
-        self.arm = ref.part("right_arm")
-        self.not_arm = self.robot & ~self.arm
         self.apron = ref.geoms(prefix="apron")
         self.floor = ref.geoms(names=["floor"])
         self.disc_id = w.m.body("discus").id
-        self.trackers = {"released": None, "landed": None, "exit": False}
+        self.disc_mass = float(w.m.body_subtreemass[self.disc_id])
+        # last: the discus' state when the hand last held it (time, centre, velocity, axis, spin about the axis);
+        # clear: since when it has touched nothing of the robot after the hold ended
+        self.trackers = {"released": None, "landed": None, "exit": False, "last": self._state(w, 0.0), "clear": None,
+                         "dv": 0.0}
 
-    def may_grip(self, w, side, name):
-        return False                                          # held from t = 0; once let go it cannot be gripped again
+    def _state(self, w, t) -> list:
+        ax = w.d.xmat[self.disc_id].reshape(3, 3)[:, 2]
+        _, va = w.free["discus"]
+        return [round(t, 4), *w.pos("discus").tolist(), *w.vel("discus").tolist(), *ax.tolist(),
+                float(w.d.qvel[va + 5])]
 
     def _marks(self, w, ref):
         """Where the robot touches now outside the circle: (in the rear half?, in the front half?). Outside = the
@@ -203,22 +273,43 @@ class Task(TaskBase):
                 ref.stage("exit")
         if tr["landed"] is not None:
             return
-        held = bool(w.holder("discus"))
+        on = ref.parts_touching(self.disc)
         if tr["released"] is None:
-            if held:
+            if on - {"right_hand"}:
+                return ref.fail("the discus was touched by something other than the throwing hand",
+                                parts=sorted(on - {"right_hand"}))
+            if w.held["right"] == "discus":                    # the hand's fingers and thumb or palm on it: held
+                tr["last"], tr["clear"] = self._state(w, ref.time), None
                 return
-            tr["released"] = ref.time
-            c, v = w.pos("discus"), w.vel("discus")
-            ax = w.d.xmat[self.disc_id].reshape(3, 3)[:, 2]
-            _, va = w.free["discus"]
+            if on:                                             # on the hand, but not held
+                tr["clear"] = None
+                if ref.time - tr["last"][0] > p["carry_s"] + 1e-9:
+                    return ref.fail("the discus stayed on the hand without the hand's hold",
+                                    unheld_s=round(ref.time - tr["last"][0], 3))
+                return
+            if tr["clear"] is None:
+                tr["clear"] = round(ref.time, 4)
+            if ref.time - tr["clear"] < p["release_gap_s"] - 1e-9:
+                return
+            tr["released"] = tr["last"][0]                     # the release: the hand's last hold
+            now = self._state(w, ref.time)                     # (the flight's start: measured now, free of the hand)
+            v, ax = np.array(now[4:7]), np.array(now[7:10])
+            ref.metrics["release_time_s"] = tr["released"]
             ref.metrics["release_speed_m_s"] = round(float(np.linalg.norm(v)), 2)
-            ref.metrics["release_height_m"] = round(float(c[2]), 3)
+            ref.metrics["release_height_m"] = round(float(now[3]), 3)
             ref.metrics["release_tilt_deg"] = round(math.degrees(math.acos(min(1.0, abs(float(ax[2]))))), 1)
-            ref.metrics["release_spin_rad_s"] = round(abs(float(w.d.qvel[va + 5])), 1)
+            ref.metrics["release_spin_rad_s"] = round(abs(float(now[10])), 1)
             ref.stage("release")
-        elif (ref.touching(self.disc, self.not_arm)
-              or (ref.time - tr["released"] > p["retouch_grace_s"] and ref.touching(self.disc, self.arm))):
-            return ref.fail("the discus was touched after the release", parts=sorted(ref.parts_touching(self.disc)))
+        elif w.held["right"] == "discus":
+            return ref.fail("the discus was gripped again after the release")
+        elif on - {"right_hand"} or (on and ref.time - tr["released"] > p["retouch_grace_s"]):
+            return ref.fail("the discus was touched after the release", parts=sorted(on))
+        elif on and ref.failed is None:                        # a brush in the grace: it may not throw it again
+            tr["dv"] = round(tr["dv"] + contact_dv(w, self.disc, self.robot, self.disc_mass), 6)
+            ref.metrics["retouch_dv_m_s"] = round(tr["dv"], 3)
+            if tr["dv"] > p["retouch_dv_m_s"]:
+                return ref.fail("the discus was struck after the release (not a clean release)",
+                                dv_m_s=round(tr["dv"], 3))
         pts = ref.contact_points(self.disc, ref.ground)
         if not len(pts):
             return
@@ -239,5 +330,5 @@ class Task(TaskBase):
 
     def privileged(self, w):
         return {"discus": w.pos("discus").tolist(), "discus_velocity": w.vel("discus").tolist(),
-                "discus_axis": w.d.xmat[self.disc_id].reshape(3, 3)[:, 2].tolist(), "held": bool(w.holder("discus")),
+                "discus_axis": w.d.xmat[self.disc_id].reshape(3, 3)[:, 2].tolist(), "held": w.held["right"] == "discus",
                 "circle_radius": self.R, "sector_half_angle_deg": math.degrees(self.half_sector)}

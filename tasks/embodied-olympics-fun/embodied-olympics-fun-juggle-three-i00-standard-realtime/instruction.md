@@ -1,15 +1,15 @@
 # embodied-olympics juggle-three — instance i00 — STANDARD-REALTIME MODE (robot as a service; time does not stop)
 
-You control a simulated Unitree G1 humanoid robot (29 joints, 1.32 m tall, 33 kg; the Embodied Olympics simulator on MuJoCo)
+You control a simulated Unitree G1 humanoid robot (29 joints, 1.32 m tall, 35 kg; the Embodied Olympics simulator on MuJoCo)
 **as if it were real hardware**: the simulator runs in a service you cannot open, you reach it only through a
 client, and like a real venue it does not wait for you: once an attempt is running, the robot, the ball and the venue
-move while you think. **Task:** Juggle three balls in a cascade: throw each ball from one hand in an arc to the other, the hands in turn, until 10 catches have been made in a row.
+move while you think. **Task:** Juggle three balls in a cascade: throw each ball from one hand in an arc to the other, the hands in turn, catching each in the hand, until 10 catches have been made in a row.
 
 **Slowdown: S = 1.** The world runs at 1/S of real speed: one control step (10 ms of robot time) every
 S x 10 ms of wall-clock time (real time). `spec()["timing"]["slowdown"]` states it.
 
 ## The venue
-You stand on level ground, nothing around you. Your forearms point forwards, level, the palms up, about 0.38 m apart; a ball lies gripped on each, and the red ball hangs above the yellow one over your right palm until it is thrown towards your left hand. A ball is released when its hand's grip is switched off.
+You stand on level ground, nothing around you. Your forearms point forwards, your palms up and your fingers forwards, the hands' grasp centres about 0.37 m apart and 1.1 m above the ground; a ball is held in each hand, and the red ball waits in a small two-wheel ball machine on the ground 1.0 m in front of you, which lobs it onto your left hand. A hand's closure command closes its fingers and thumb; with the hand open, a ball rests on its palm.
 
 Directions are from the robot at the start: +x is the way you face, +y is to your left, +z is up; the floor is level.
 
@@ -17,11 +17,12 @@ Directions are from the robot at the start: +x is the way you face, +y is to you
 ## The rules
 **Rule book:** No rule book: the three-ball cascade as jugglers define and count it (siteswap 3; the International Jugglers' Association counts a run in catches): each ball is thrown from one hand and caught by the other, the hands throw in turn, the balls follow one another in a fixed order; a run ends with a drop. Where this task departs from it:
 
-- A hand holds one ball at a time by a grip switched on and off (it closes on a ball whose surface is within 3.5 cm of the palm and that moves no faster than 6 m/s relative to it), so "two balls in one hand at the start" is modelled: the first of the two (the red ball) waits 0.14 m above the right palm and is thrown by the venue at t = 2.0 s, on an arc that rises 0.5 m and comes down on where the left palm is at the start. Until then it may not be touched.
-- A throw is a release after which the ball, touching nothing, rises at least 0.3 m above where it was let go; a hand-to-hand pass is not a throw. So that a ball laid on the other hand and lifted is not one, the rise counts only until the ball first touches you again, and from that first touch the other hand has 0.15 s to grip it.
+- The hands are the G1's own Dex3-1 three-finger hands (a thumb, an index and a middle finger; 1.37 N m back-driven per finger joint, at the device's torques); nothing is welded. The robot holds one ball per hand, so "two balls in one hand at the start" is modelled: the third ball (the red one) is thrown into the left hand by a small two-wheel ball machine on the ground 1.0 m in front of you at about t = 2.0 s, on a lob about 0.4 m above the hand that comes down on where the left hand's grasp centre is at the start; its first catch counts as a catch of a ball thrown by the right hand. Until it is thrown it may not be touched.
+- A catch is the catching hand holding the ball between its thumb and its fingers (the ball touching the thumb and the index or middle finger) for 0.05 s without a break, the hold beginning at the latest 0.15 s after the ball first touched you again; a ball is in a hand from its catch until it has touched nothing of that hand for 0.02 s (released, at its last contact: a ball that rattles in the hand is not released), and it may touch nothing of you but that hand.
+- A throw is a release after which the ball, touching nothing, rises at least 0.3 m above where it left the hand; a hand-to-hand pass is not a throw. So that a ball laid on the other hand and lifted is not one, the rise counts only until the ball first touches you again.
 - The balls are spheres of a juggling ball's size and mass with a soft bounce; they fly in air (MuJoCo's ellipsoid fluid model: drag, a quasi-steady model), still air.
 
-Three balls (0.07 m across, 0.13 kg). At the start your forearms are level, the palms up; the blue ball is gripped on your left palm, the yellow ball on your right palm, and the red ball waits 0.14 m above your right palm: it stands for the second ball of the right hand and is thrown for you at t = 2.0 s, on an arc that rises 0.5 m and comes down on where your left palm is at the start. Before that it may not be touched (by you or by a ball you hold). A hand grips one ball at a time: its grip closes on a ball whose surface is within 3.5 cm of the palm and that moves no faster than 6 m/s relative to it. A throw: a hand lets go of its ball and the ball, touching nothing but air, rises at least 0.3 m above the point where it was let go; only the rise before the ball first touches you again counts. A catch: a hand grips a ball that has been thrown by the other hand (the red ball's first throw counts as the right hand's), at the latest 0.15 s after the ball first touched you again. The cascade's order: the catches alternate between the hands, the left hand first, and take the balls in the order red, blue, yellow, red, ... You succeed at the 10th catch. You fail if a ball touches the ground; if a ball in flight touches any part of you other than a hand, or still touches the hand that threw it later than 0.1 s after the release; if a ball is gripped by the hand that let go of it, or before it has risen 0.3 m; if a ball that has touched a hand again is not gripped within 0.15 s (it rests on the hand or bounces off it); if a catch is out of the cascade's order (the wrong hand or the wrong ball); if the waiting ball is touched before its launch; if you fall (your pelvis lower than 0.35 m above the ground, or any part of you other than your feet on the ground); or after 20 s.
+Three balls (0.07 m across, 0.13 kg). Both your hands are three-finger hands (a thumb, an index and a middle finger) that hold things only by contact and friction. At the start your forearms point forwards, your palms up; the blue ball is held in your left hand, the yellow ball in your right hand, and the red ball rests in a small ball machine on the ground 1.0 m in front of you: it stands for the second ball of the right hand and is thrown for you at about t = 2.0 s (it is thrown when it has left the machine's wheels), on a lob about 0.4 m above your hand that comes down on where the centre of your left hand's grasp is at the start. Before that it may not be touched (by you or by a ball you hold). A catch: a hand holds a ball between its thumb and its fingers (the ball touches the thumb and the index or middle finger: a ball lying on the palm or on the fingers alone is not caught) for 0.05 s without a break, on a ball that has been thrown by the other hand (the red ball's first throw counts as the right hand's), the hold beginning at the latest 0.15 s after the ball first touched you again. A ball is in a hand from its catch (the blue and the yellow ball from the start) until it has touched nothing of that hand for 0.02 s: its release, at its last contact with the hand; a ball in a hand may touch nothing of you but that hand. A throw: after the release the ball, touching nothing but air, rises at least 0.3 m above the point where it left the hand; only the rise before the ball first touches you again counts. The cascade's order: the catches alternate between the hands, the left hand first, and take the balls in the order red, blue, yellow, red, ... You succeed at the 10th catch. You fail if a ball touches the ground; if a ball in a hand touches any part of you other than that hand (the other hand included); if a ball in flight touches any part of you other than a hand, or still touches the hand that released it later than 0.1 s after the release; if a ball is caught by the hand that released it, or before it has risen 0.3 m; if a ball that has touched a hand again is not held within 0.15 s (it rests on the hand or bounces off it); if a catch is out of the cascade's order (the wrong hand or the wrong ball); if the waiting ball is touched before its launch; if you fall (your pelvis lower than 0.35 m above the ground, or any part of you other than your feet on the ground); or after 20 s.
 
 A referee in the service decides this from the simulator's state. The events that must happen, in order, are
 **first catch → half way → ten catches**. An attempt (an episode) ends at the success, at the first rule violation, or after 20 s
@@ -40,7 +41,7 @@ A referee in the service decides this from the simulator's state. The events tha
   Use your turns to start attempts, read what happened, and improve the program.
 - **Attempts.** `r.reset()` abandons the running attempt (or follows one that has ended) and starts a new one from the
   same start, paused until your next `submit`; `spec()["budget"]["reset"]` says how many resets you have
-  (10 here; authoritative: if it says 0, the one attempt is the run). Once an attempt has ended,
+  (5 here; authoritative: if it says 0, the one attempt is the run). Once an attempt has ended,
   `submit` raises `EpisodeOver` until you reset. **Only your last attempt is graded**, and a success ends the trial at
   once. The wall clock is the run's and never restarts.
 - **No privileged state.** You get what the robot's own sensors give: its two head cameras (`head_left`,
@@ -108,16 +109,16 @@ One row is one control step (10 ms; the physics runs at 1 kHz) unless `dt` sprea
 
 | type | row (then `grip_left`, `grip_right`) | floats | who drives what |
 |---|---|---|---|
-| `stand` | waist 3 + arms 14 joint targets | 19 | the platform holds the legs in the stance; you give the waist's 3 and the arms' 14 joint targets (rad) |
-| `walk` | `vx`, `vy`, `wz` + waist 3 + arms 14 joint targets | 22 | Unitree's walking policy drives the legs from the velocity command (vx forward, vy to the left, m/s; wz turning left, rad/s; the robot's own frame); you give the waist and arm joint targets |
-| `run` | `vx`, `vy`, `wz` | 5 | the running policy drives all 29 joints from the velocity command (it swings the arms) |
-| `run_arms` | `vx`, `vy`, `wz` + arms 14 joint targets | 19 | the running policy drives the legs and the waist; you give the 14 arm joint targets |
-| `joints` | all 29 joint targets | 31 | you give all 29 joint targets (rad); the default PD gains, no feed-forward |
-| `lowcmd` | all 29 joints × (`q`, `dq`, `tau`, `kp`, `kd`): 29 targets, then 29 velocities, 29 torques, 29 kp, 29 kd | 147 | Unitree's LowCmd for all 29 joints: position targets (rad), velocity targets (rad/s), feed-forward torques (N m), kp, kd; the motor torque is kp (q - q_measured) + kd (dq - dq_measured) + tau, evaluated at 1 kHz |
-| `walk_falcon` | `vx`, `vy`, `wz` + waist 3 + arms 14 joint targets (as `walk`) | 22 | FALCON's walking policy (LeCAR-Lab, trained with arm motions and forces on the hands; it also nudges the wrists) drives the legs from the velocity command (vx forward, vy to the left, m/s; wz turning left, rad/s; the robot's own frame); you give the waist and arm joint targets |
-| `walk_agile` | `vx`, `vy`, `wz` + waist 3 + arms 14 joint targets (as `walk`) | 22 | AGILE's velocity-height walking policy (NVIDIA WBC-AGILE, trained while the arms and the waist moved) drives the legs from the velocity command (vx forward, vy to the left, m/s; wz turning left, rad/s; the robot's own frame); you give the waist and arm joint targets |
+| `stand` | waist 3 + arms 14 joint targets | 19 | the platform holds the legs in the stance; you give the waist's 3 and the arms' 14 joint targets (rad) (grip_left: the left hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch); grip_right: the right hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch)) |
+| `walk` | `vx`, `vy`, `wz` + waist 3 + arms 14 joint targets | 22 | Unitree's walking policy drives the legs from the velocity command (vx forward, vy to the left, m/s; wz turning left, rad/s; the robot's own frame); you give the waist and arm joint targets (grip_left: the left hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch); grip_right: the right hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch)) |
+| `run` | `vx`, `vy`, `wz` | 5 | the running policy drives all 29 joints from the velocity command (it swings the arms) (grip_left: the left hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch); grip_right: the right hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch)) |
+| `run_arms` | `vx`, `vy`, `wz` + arms 14 joint targets | 19 | the running policy drives the legs and the waist; you give the 14 arm joint targets (grip_left: the left hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch); grip_right: the right hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch)) |
+| `joints` | all 29 joint targets | 31 | you give all 29 joint targets (rad); the default PD gains, no feed-forward (grip_left: the left hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch); grip_right: the right hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch)) |
+| `lowcmd` | all 29 joints × (`q`, `dq`, `tau`, `kp`, `kd`): 29 targets, then 29 velocities, 29 torques, 29 kp, 29 kd | 147 | Unitree's LowCmd for all 29 joints: position targets (rad), velocity targets (rad/s), feed-forward torques (N m), kp, kd; the motor torque is kp (q - q_measured) + kd (dq - dq_measured) + tau, evaluated at 1 kHz (grip_left: the left hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch); grip_right: the right hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch)) |
+| `walk_falcon` | `vx`, `vy`, `wz` + waist 3 + arms 14 joint targets (as `walk`) | 22 | FALCON's walking policy (LeCAR-Lab, trained with arm motions and forces on the hands; it also nudges the wrists) drives the legs from the velocity command (vx forward, vy to the left, m/s; wz turning left, rad/s; the robot's own frame); you give the waist and arm joint targets (grip_left: the left hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch); grip_right: the right hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch)) |
+| `walk_agile` | `vx`, `vy`, `wz` + waist 3 + arms 14 joint targets (as `walk`) | 22 | AGILE's velocity-height walking policy (NVIDIA WBC-AGILE, trained while the arms and the waist moved) drives the legs from the velocity command (vx forward, vy to the left, m/s; wz turning left, rad/s; the robot's own frame); you give the waist and arm joint targets (grip_left: the left hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch); grip_right: the right hand's closure command, 0 (open, the fingers straight) to 1 (every drive closing towards its closed position; fingers stop on what they touch)) |
 
-Velocity commands are in the robot's own frame (`vx` forward, `vy` to its left, m/s; `wz` turning left, rad/s). Bounds: `walk` |vx| ≤ 0.8, |vy| ≤ 0.5, |wz| ≤ 1.57; `walk_falcon` -0.8 ≤ vx ≤ 0.8, -0.5 ≤ vy ≤ 0.5, -1 ≤ wz ≤ 1; `walk_agile` -0.5 ≤ vx ≤ 0.8, -0.5 ≤ vy ≤ 0.5, -1 ≤ wz ≤ 1; `run` and `run_arms` 0 ≤ vx ≤ 5, |vy| ≤ 0.12, |wz| ≤ 0.5. Joint targets are absolute angles (rad). Values outside the bounds are clipped. `grip_left`, `grip_right`: ≥ 0.5 closes the hand's grip, < 0.5 opens it. At the start the robot is in `stand` mode, but not with the arms at rest (the venue text says how it starts): the joint table's last column has the angles in force. The left and the right grips are closed at the start. The `stand` row that keeps the start as it is: `[0, 0, 0, 0.2, 0.2, 0, -0.29, 0, 0, 0, 0.2, -0.2, 0, -0.29, 0, 0, 0, 1, 1]` (`spec()["start_command"]` has it, and `get_obs(seconds=...)` keeps the command in force); a `stand` row with other angles or grips moves the arms or lets go.
+Velocity commands are in the robot's own frame (`vx` forward, `vy` to its left, m/s; `wz` turning left, rad/s). Bounds: `walk` |vx| ≤ 0.8, |vy| ≤ 0.5, |wz| ≤ 1.57; `walk_falcon` -0.8 ≤ vx ≤ 0.8, -0.5 ≤ vy ≤ 0.5, -1 ≤ wz ≤ 1; `walk_agile` -0.5 ≤ vx ≤ 0.8, -0.5 ≤ vy ≤ 0.5, -1 ≤ wz ≤ 1; `run` and `run_arms` 0 ≤ vx ≤ 5, |vy| ≤ 0.12, |wz| ≤ 0.5. Joint targets are absolute angles (rad). Values outside the bounds are clipped. `grip_left` and `grip_right`: each hand's closure command, 0 (open) to 1 (closed). At the start the robot is in `stand` mode, but not with the arms at rest (the venue text says how it starts): the joint table's last column has the angles in force. The left hand is closed on `ball_b` at the start (closure command 1): opening it lets go. The right hand is closed on `ball_c` at the start (closure command 1): opening it lets go. The `stand` row that keeps the start as it is: `[0, 0, 0, -0.0513, 0.5046, -0.0391, -0.8567, -1.8805, -0.4081, 0.835, -0.1127, -0.0526, -0.2787, -0.8567, 1.7924, 0.122, -0.9866, 1, 1]` (`spec()["start_command"]` has it, and `get_obs(seconds=...)` keeps the command in force); a `stand` row with other angles or grips moves the arms or lets go.
 
 Joint order everywhere (Unitree's SDK order), with each joint's range, speed limit, torque limit and default gains
 (also in `spec()["robot_facts"]`):
@@ -139,20 +140,20 @@ Joint order everywhere (Unitree's SDK order), with each joint's range, speed lim
 | 12 | `waist_yaw` | [-2.618, 2.618] | 32 | 88 | 400 | 10 | 0 |
 | 13 | `waist_roll` | [-0.52, 0.52] | 37 | 50 | 400 | 10 | 0 |
 | 14 | `waist_pitch` | [-0.52, 0.52] | 37 | 50 | 400 | 10 | 0 |
-| 15 | `left_shoulder_pitch` | [-3.0892, 2.6704] | 37 | 25 | 300 | 6 | 0.2 |
-| 16 | `left_shoulder_roll` | [-1.5882, 2.2515] | 37 | 25 | 300 | 6 | 0.2 |
-| 17 | `left_shoulder_yaw` | [-2.618, 2.618] | 37 | 25 | 300 | 6 | 0 |
-| 18 | `left_elbow` | [-1.0472, 2.0944] | 37 | 25 | 300 | 6 | -0.29 |
-| 19 | `left_wrist_roll` | [-1.9722, 1.9722] | 37 | 25 | 100 | 2 | 0 |
-| 20 | `left_wrist_pitch` | [-1.6144, 1.6144] | 22 | 5 | 60 | 1 | 0 |
-| 21 | `left_wrist_yaw` | [-1.6144, 1.6144] | 22 | 5 | 60 | 1 | 0 |
-| 22 | `right_shoulder_pitch` | [-3.0892, 2.6704] | 37 | 25 | 300 | 6 | 0.2 |
-| 23 | `right_shoulder_roll` | [-2.2515, 1.5882] | 37 | 25 | 300 | 6 | -0.2 |
-| 24 | `right_shoulder_yaw` | [-2.618, 2.618] | 37 | 25 | 300 | 6 | 0 |
-| 25 | `right_elbow` | [-1.0472, 2.0944] | 37 | 25 | 300 | 6 | -0.29 |
-| 26 | `right_wrist_roll` | [-1.9722, 1.9722] | 37 | 25 | 100 | 2 | 0 |
-| 27 | `right_wrist_pitch` | [-1.6144, 1.6144] | 22 | 5 | 60 | 1 | 0 |
-| 28 | `right_wrist_yaw` | [-1.6144, 1.6144] | 22 | 5 | 60 | 1 | 0 |
+| 15 | `left_shoulder_pitch` | [-3.0892, 2.6704] | 37 | 25 | 300 | 6 | -0.0513 |
+| 16 | `left_shoulder_roll` | [-1.5882, 2.2515] | 37 | 25 | 300 | 6 | 0.5046 |
+| 17 | `left_shoulder_yaw` | [-2.618, 2.618] | 37 | 25 | 300 | 6 | -0.0391 |
+| 18 | `left_elbow` | [-1.0472, 2.0944] | 37 | 25 | 300 | 6 | -0.8567 |
+| 19 | `left_wrist_roll` | [-1.9722, 1.9722] | 37 | 25 | 100 | 2 | -1.8805 |
+| 20 | `left_wrist_pitch` | [-1.6144, 1.6144] | 22 | 5 | 60 | 1 | -0.4081 |
+| 21 | `left_wrist_yaw` | [-1.6144, 1.6144] | 22 | 5 | 60 | 1 | 0.835 |
+| 22 | `right_shoulder_pitch` | [-3.0892, 2.6704] | 37 | 25 | 300 | 6 | -0.1127 |
+| 23 | `right_shoulder_roll` | [-2.2515, 1.5882] | 37 | 25 | 300 | 6 | -0.0526 |
+| 24 | `right_shoulder_yaw` | [-2.618, 2.618] | 37 | 25 | 300 | 6 | -0.2787 |
+| 25 | `right_elbow` | [-1.0472, 2.0944] | 37 | 25 | 300 | 6 | -0.8567 |
+| 26 | `right_wrist_roll` | [-1.9722, 1.9722] | 37 | 25 | 100 | 2 | 1.7924 |
+| 27 | `right_wrist_pitch` | [-1.6144, 1.6144] | 22 | 5 | 60 | 1 | 0.122 |
+| 28 | `right_wrist_yaw` | [-1.6144, 1.6144] | 22 | 5 | 60 | 1 | -0.9866 |
 
 What the platform does and does not do for you:
 
@@ -189,12 +190,7 @@ What the platform does and does not do for you:
   from the target in force. Joints a type does not name keep their targets. The speed limit is a limit on targets;
   what bounds the joint itself is the motor's torque-speed curve (a `lowcmd` feed-forward torque can turn a joint up to
   about 1.15 times that speed, where the motor's torque has fallen to zero).
-- **The hands** have no working fingers here; each carries a fist pad (a box of 4.4 × 8 × 10 cm beyond the wrist, the
-  10 cm along the forearm) with a grip: while `grip_left` / `grip_right` ≥ 0.5 the hand holds the nearest grippable
-  object whose surface is within 3.5 cm of the palm point (the middle of the pad, 4.5 cm beyond the wrist flange along
-  the forearm) and that moves at most 6 m/s relative to it; below 0.5 it lets go at once. Since the palm point is inside
-  the pad, an object can be gripped where it touches one of the pad's two broad faces, not at its narrow sides or its
-  far end. What is grippable is the task's own equipment, named in the rules.
+- **The left and right hands are the robot's own**: Unitree Dex3-1 three-finger hand (0.71 kg; thumb 3 + index 2 + middle 2 joints, each its own motor; MuJoCo Menagerie g1_with_hands kinematics). 7 drives per hand; closing torques 0.49, 0.86 N m per joint; each drive is position-servoed and force-limited (closing stops where its force limit is reached, a larger load drags it open). `grip_left` and `grip_right` are the closure commands: one value per hand from 0 (open) to 1 (closed), all of that hand's drives following it together. The hand holds only by contact and friction (no weld): what it holds can slip, turn or drop; it holds an object while the fingers and the thumb or palm touch it. The fingers, thumb and palm collide with the world and with the rest of your own body. The proprioception reports each hand's closure and every drive's position and torque (`spec()` / `s.hold()` list the drives with their limits).
 - **A tool on a hand** (a racket, a paddle, a club; where the task has one) is fixed to the wrist in place of the pad.
   It collides with the world, the ball and the rest of your own body.
 - **The air** is real: balls and implements feel drag and, when they spin, lift.
@@ -207,7 +203,7 @@ Each row (`meta["proprio"]["now"]`, `res.proprio`) has, in `spec()["proprio_layo
 force (`*_target`, rad), the pelvis IMU and the torso IMU (each: orientation quaternion `qw, qx, qy, qz`, world from
 sensor; angular velocity `gx, gy, gz`, rad/s; acceleration `ax, ay, az`, m/s², gravity included; in the sensor's frame),
 `holding_left`, `holding_right` (1 while that hand grips something), `mode` (0 stand, 1 walk, 2 run, 3 run_arms,
-4 joints / lowcmd; the G1 also 5 walk_falcon, 6 walk_agile), the velocity command in force (`cmd_vx`, `cmd_vy`, `cmd_wz`) and `time_s`, the attempt's time. A
+4 joints / lowcmd; the G1 also 5 walk_falcon, 6 walk_agile), the velocity command in force (`cmd_vx`, `cmd_vy`, `cmd_wz`) and `time_s`, the attempt's time. Then, at the end of the row, the grippers: `jaw_opening_left`, `jaw_speed_left`, `jaw_force_left`, `jaw_opening_right`, `jaw_speed_right`, `jaw_force_right` (the opening between the pads in m, its speed in m/s, + opening, and the clamp force in N, + closing); a gripper's `holding_*` is 1 while both its jaws touch the same object. A
 real G1 has no sensor for its position in the venue, and neither do you: that is what the cameras are for.
 
 ## External material

@@ -1,6 +1,10 @@
-"""Basketball dribble (FIBA): dribble the ball from the end line into the frontcourt, 14 m, without a dribbling or a
-travelling violation. Official court and size-7 ball; the Unitree H1-2."""
+"""Basketball dribble (FIBA): the ball starts held between the H1-2's own two Inspire hands (rfo.realhand: five
+fingers each, closed onto the ball; contact and friction only, nothing welded); dribble it from the end line into the
+frontcourt, 14 m, pushing it with one hand at a time (the fingers and the palm), without a dribbling, a carrying or a
+travelling violation. Official court and size-7 ball; the Unitree H1-2. The court, travelling and two-hand hold blocks
+are copied byte-identically from layup."""
 import math
+import xml.etree.ElementTree as ET
 
 import mujoco
 import numpy as np
@@ -18,7 +22,7 @@ FALL_Z = 0.35
 # backboard's face 1.20 m, so the centre is 0.375 m in front of the face and the ring's inner edge 0.150 m (the
 # equipment appendix: 151 mm +- 2). Ring metal 16-20 mm: 18 mm. The ring's rebound: the equipment appendix asks for an
 # energy absorption of 35 to 50 % of the impact energy: 42.5 % here, a restitution of sqrt(1 - 0.425) = 0.76 (measured
-# on this ring with this ball: 0.76, with the contact's nominal value 0.81; tests/test_free_throw.py).
+# on this ring with this ball: 0.76, with the contact's nominal value 0.81).
 COURT = dict(length=28.0, width=15.0, line=0.05, ring_x=1.575, board_x=1.20, ft_line=5.80, key_half=2.45,
              ft_radius=1.80, three_radius=6.75, three_side=0.90, no_charge=1.25, net_length=0.42)
 RING_RESTITUTION, RING_NOMINAL = math.sqrt(1.0 - 0.425), 0.81
@@ -101,14 +105,6 @@ def build_court(sc, hx: float, hy: float, p: dict, flip: bool = False) -> dict:
     return dict(x=hx, y=hy, z=p["ring_height_m"], inner_radius=p["ring_inner_diameter_m"] / 2, end_line_x=X(de),
                 free_throw_line_x=X(df), board_face_x=X(bx))
 
-
-def ball_in_hand(w, side: str = "right") -> None:
-    """The ball against the end of the fist, gripped."""
-    m, d = w.m, w.d
-    mujoco.mj_kinematics(m, d)
-    b = w.robot.mount[side]
-    w.put("ball", d.xpos[b] + d.xmat[b].reshape(3, 3) @ np.array([0.0, 0.0, 0.105 + BALL["radius"]]))
-    w.grab(side, "ball", event=False)
 # ---- end of the court block ----
 
 
@@ -222,26 +218,80 @@ class Travel:
 # ---- end of the travelling block ----
 
 
+# ---- the two-hand hold at the start (the H1-2's Inspire hands) ----
+# The ball is held as a player carries it before a play: resting on the upturned right hand, the fingers spread
+# forwards under it and curled a little round it (closure HOLD_CLOSURE), the left hand on its left side, the palm on
+# it. HOLD (each arm's joints, numeric inverse kinematics of both arms) puts the right palm under the ball and the left
+# palm on its side, each 2 mm into the ball's surface (the palm's face is PALM_FACE from the hand's grasp centre on a
+# ball this size); the start command keeps those arm targets and closures; nothing presses the ball but its weight and
+# the hands' own drives.
+HOLD = {"right": np.array([-0.4674, 0.2556, -0.335, 1.5041, 1.3391, -0.2658, 1.0833]),
+        "left": np.array([-0.2102, 0.0481, -0.724, 0.4173, 0.0342, -0.47, 0.7949])}
+HOLD_CLOSURE = {"right": 0.3, "left": 0.0}
+PALM_FACE, PALM_PRESS = 0.0265, 0.002
+# HOLD has the right upper arm 1.8 mm inside the torso's hull (the robot's self-collision, world.py): the right arm
+# starts START_ROLL (shoulder roll) off the chest, its target stays HOLD, so the servo lays it against the chest (at
+# most 0.02 mm deep; the ball as before).
+START_ROLL = -0.02
+
+
+def ball_in_hands(w) -> None:
+    """t = 0: both arms in the hold, the ball on the upturned right palm (its centre PALM_FACE - PALM_PRESS less than a
+    ball radius out of the palm, along the palm's normal), the closures set; the start command keeps them."""
+    r, d = w.robot, w.d
+    a = w.L.ARMS.start
+    for i, side in enumerate(("left", "right")):
+        d.qpos[r.qadr[a + 7 * i:a + 7 * i + 7]] = HOLD[side]
+        r.arb.q_a[a + 7 * i:a + 7 * i + 7] = r.arb.q_b[a + 7 * i:a + 7 * i + 7] = HOLD[side]
+        w.hands.cmd[side] = HOLD_CLOSURE[side]
+    d.qpos[r.qadr[a + 8]] += START_ROLL                 # the right shoulder roll off the chest (START_ROLL)
+    mujoco.mj_kinematics(w.m, d)
+    c, R = w.grasp_frame("right")
+    w.put("ball", c + R[:, 0] * (BALL["radius"] - PALM_FACE + PALM_PRESS))
+
+
+# The palm-ball contact (an explicit pair with the H1-2 model's own collision hull of the Inspire hand base, the palm:
+# PALM_GEOM). With the ball's own contact (its rule-book rebound, 0.85, a lightly damped spring) a ball on a palm
+# rattles off it. The palm is the soft part of a hand and absorbs the ball: a critically damped contact (palm rebound
+# 0.12, measured head-on at 3 m/s), with the elliptic friction cones and impratio 100 of every world with real hands
+# (rfo.realhand). The fingers' and the thumb's rubber pads keep their own contact (rfo.realhand: friction 1.0, stiff,
+# critically damped); the floor, the ring and the backboard keep the ball's own (rebound 0.85).
+PALM_SOLREF, PALM_SOLIMP, PALM_MU, PALM_REBOUND = "0.005 1", "0.99 0.999 0.001", 0.7, 0.12
+PALM_GEOM = "{side}_wrist_yaw_link_sc0"        # the hand base's hull in the H1-2 model (realhand.inspire_palm_geom)
+# ---- end of the hold ----
+
+
 class Task(TaskBase):
     name = "basketball-dribble"
     title = "Basketball: dribble to the frontcourt"
     category = "basketball-and-rackets"
     robot = "unitree_h1"
     rulebook = ("FIBA Official Basketball Rules 2024: Art. 2 (court), Art. 3 and the Basketball Equipment appendix "
-                "(size-7 ball), Art. 13 (how the ball is played), Art. 23 (out of bounds), Art. 24 (dribbling), "
-                "Art. 25 (travelling), Art. 28.1.3 (when a dribbled ball is in the frontcourt)")
+                "(size-7 ball), Art. 13 (how the ball is played), Art. 14 (control: a player holds a live ball), "
+                "Art. 23 (out of bounds), Art. 24 (dribbling), Art. 25 (travelling), Art. 28.1.3 (when a dribbled ball "
+                "is in the frontcourt)")
     deviations = [
-        "Art. 3 (equipment): the hand holds the ball by a grip switched on and off, not by fingers; the ball is "
-        "released when the grip is switched off, and after that release no grip takes it again.",
+        "the player's hands: the H1-2's own Inspire five-finger hands (six drives each: four fingers, the thumb's "
+        "flexion and rotation; fingertip forces 20 N, the thumb 30 N), each closed by one command; the ball is held "
+        "in the two hands by contact and friction alone (nothing is welded) and can slip or drop; it has left your "
+        "hands when no hand has been on it for {touch_gap_s} s. The fingers' rubber pads absorb the ball (critically "
+        "damped), so a dribbling hand gives the ball its speed by its own motion; the floor keeps the ball's "
+        "rule-book rebound.",
+        "Art. 24.1.3 (carrying the ball, a hand under it): judged by where a hand touches the ball: a touch from "
+        "below (the hand's lowest contact point on the ball lower than the ball's centre by more than "
+        "{carry_depth} of its radius) that lasts longer than {carry_s} s carries the ball; a hand on top of it or on "
+        "its side pushes it.",
         "Art. 24.1.2 (the ball 'comes to rest' in a hand) is read as: a hand's touch of the ball that lasts longer "
         "than {hand_touch_max_s} s. A dribble that has ended cannot legally be started again (Art. 24.2), so a ball "
         "that comes to rest in a hand, or is touched by both hands at once, ends the attempt.",
-        "Art. 13: every touch of the ball by a part of you other than a hand is a violation; intent (an accidental "
-        "touch of a leg is legal in the rule book) cannot be judged.",
+        "Art. 13: every touch of the ball by a part of you other than a hand is a violation, also while the ball is "
+        "held at the start (no ball held against the chest or between the forearms); intent (an accidental touch of "
+        "a leg is legal in the rule book) cannot be judged.",
         "Art. 14 / 24 give no distance for 'control' of a dribbled ball: here the ball's centre must stay within "
         "{control_radius_m} m (horizontally) of your pelvis, so that a ball thrown ahead and walked after is not a "
         "dribble.",
-        "Art. 28 (eight seconds to reach the frontcourt) is not applied: the attempt lasts at most {time_limit_s} s of robot time.",
+        "Art. 28 (eight seconds to reach the frontcourt) is not applied: the attempt lasts at most {time_limit_s} s "
+        "of robot time.",
     ]
     time_limit_s = 60.0
     start = (0.0, 0.0, 0.0)
@@ -251,34 +301,44 @@ class Task(TaskBase):
                   free_throw_line_m=5.80, start_from_end_line_m=0.50, start_from_basket_axis_m=2.50,
                   ring_height_m=3.05, ring_inner_diameter_m=0.45, ring_metal_m=0.018, ring_centre_to_board_m=0.375,
                   board_width_m=1.80, board_height_m=1.05, board_bottom_m=2.90,
-                  hand_touch_max_s=0.30, touch_gap_s=0.03, step_gap_s=0.03, pivot_slide_m=0.20, control_radius_m=2.0)
+                  hand_touch_max_s=0.30, touch_gap_s=0.03, step_gap_s=0.03, pivot_slide_m=0.20, control_radius_m=2.0,
+                  carry_s=0.10, carry_depth=0.3)
 
-    sentence = ("Dribble the basketball in your right hand from the end line across the centre line, 14 m up the "
-                "court, without a dribbling or a travelling violation.")
+    sentence = ("Dribble the basketball, which starts held in your two hands, from the end line across the "
+                "centre line, 14 m up the court, one hand at a time, without a dribbling, carrying or travelling "
+                "violation.")
     rules = ("A FIBA court, {court_length_m} m by {court_width_m} m inside its boundary lines (lines "
              "{line_width_m} m wide); the centre line's axis is {centre_line_m} m from the end line. The ball is a "
              "size-7 basketball (" + f"{2 * BALL['radius']:.3f} m across, {BALL['mass']:.2f} kg, it keeps "
-             f"{BALL['bounce']:.2f} of its speed in a bounce on the floor" + "). It starts gripped in your right "
-             "hand, and you stand still. Starting the dribble: the first foot you lift makes the other your pivot "
-             "foot; the pivot foot, and before a foot is lifted either foot, may not slide more than "
-             "{pivot_slide_m} m along the floor, and the pivot foot may not leave the floor before "
-             "you have let go of the ball (a foot has left the floor when it has not touched it for {step_gap_s} s). "
-             "The dribble: after the release you play the ball with one hand at a time, by touches that push it to "
-             "the floor (thrown, tapped, rolled or bounced): between two touches by your hands the ball must have "
-             "touched the floor; contacts of a hand less than {touch_gap_s} s apart are one touch; the release "
-             "counts as the first touch (the releasing hand may stay on the ball for {touch_gap_s} s after the grip "
-             "opens; the next touch by a hand needs a bounce on the floor first); no grip takes the ball again. There is no limit to your steps while the ball is not in a hand. You succeed at the "
+             f"{BALL['bounce']:.2f} of its speed in a bounce on the floor" + "). Your hands are five-finger hands, each "
+             "closed by its grip value (0 open, 1 closed); they hold the ball only by contact and friction: it starts "
+             "resting on your upturned right hand, the fingers curled a little round it, your left hand on its side, "
+             "and it can slip or drop. A hand is the palm, the fingers, the thumb and the wrist; a hand is on the ball while it touches "
+             "the ball, gaps shorter than {touch_gap_s} s included; the ball is in your hands while at least one hand "
+             "is on it, and it has left them once no hand has been on it for {touch_gap_s} s. You stand still. "
+             "Starting the dribble: the first foot you lift makes the other your pivot foot; the pivot foot, and "
+             "before a foot is lifted either foot, may not slide more than {pivot_slide_m} m along the floor, and the "
+             "pivot foot may not leave the floor before the ball has left your hands (a foot has left the floor when "
+             "it has not touched it for {step_gap_s} s). While the ball is in your hands it may touch no part of you "
+             "but your hands, and it may not touch the floor. The ball leaving your hands (pushed, dropped or "
+             "slipped) is the first touch of your dribble. The dribble: after that you play the ball with one hand at "
+             "a time, by touches that push it to the floor (thrown, tapped, rolled or bounced): between two touches by "
+             "your hands the ball must have touched the floor; contacts of a hand less than {touch_gap_s} s apart are "
+             "one touch. There is no limit to your steps while the ball is not in a hand. You succeed at the "
              "first moment the ball touches the floor in the frontcourt (beyond the centre line's far edge, "
              "{centre_line_m} m plus half a line width from the end line) with both your feet in the frontcourt "
              "(every point where each foot last touched the floor is beyond that edge), after at least one touch "
-             "of your dribble. You fail if you travel at the start; if a hand's touch lasts longer than "
-             "{hand_touch_max_s} s (the ball has come to rest in the hand); if both hands touch the ball at the "
-             "same time; if a hand touches the ball twice without the ball having touched the floor in between; if "
-             "the ball touches any part of you other than a hand; if the ball's centre is ever more than "
-             "{control_radius_m} m (horizontally) from your pelvis after the release; if the ball or any part of "
-             "you touches the floor on or outside a boundary line (out of bounds); if you fall (a fall: your pelvis "
-             f"lower than {FALL_Z} m above the floor, or any part of you other than your feet on the floor)" + "; or "
-             "after {time_limit_s} s.")
+             "of your dribble after the ball left your hands. You fail if you travel at the start; if the ball "
+             "touches the floor or a part of you other than a hand while it is in your hands; if, after it has left "
+             "your hands, a hand's touch lasts longer than {hand_touch_max_s} s (the ball has come to rest in the "
+             "hand); if a hand carries the ball (it touches the ball from below, its lowest contact point on the ball lower "
+             "than the ball's centre by more than {carry_depth} of the ball's radius, for longer than {carry_s} s); "
+             "if both hands touch the ball at the same time; if a hand touches the ball twice without the ball "
+             "having touched the floor in between; if the ball touches any part of you other than a hand; if the "
+             "ball's centre is ever more than {control_radius_m} m (horizontally) from your pelvis after it left your "
+             "hands; if the ball or any part of you touches the floor on or outside a boundary line (out of bounds); "
+             f"if you fall (a fall: your pelvis lower than {FALL_Z} m above the floor, or any part of you other than "
+             "your feet on the floor)" + "; or after {time_limit_s} s.")
     venue = ("You stand in the backcourt just inside the end line, facing up the court (+x): the end line's inner "
              "edge is {start_from_end_line_m} m behind your pelvis and the centre line {centre_line_m} m beyond that "
              "edge. The basket of this end is to your right: the court's long axis, with the backboard (its lower "
@@ -286,12 +346,16 @@ class Task(TaskBase):
              "{start_from_basket_axis_m} m to your right; the side lines are {court_width_m} m apart, the nearer one "
              "5 m to your left. Painted on the floor: the boundary lines, the restricted area, the free-throw line "
              "({free_throw_line_m} m from the end line) and circle, the three-point line, the centre line and "
-             "circle. The ball is against the end of your right fist. A ball is released when the hand's grip is "
-             "switched off.")
-    difficulty = ("The ball keeps 85 % of its speed in a bounce, so every touch has to push it down and forward again "
-                  "to where the hand will be, with a rigid palm 8 cm wide, for 14 m, on a body whose walking gait "
-                  "covers about 0.7 m/s, drifts in heading, and is disturbed by every push of the arm."
-                  " The built-in walking gait steps on the spot even at a zero command, so while the ball is in your hand its steps are counted like any others.")
+             "circle. The ball rests on your upturned right hand in front of your chest, its centre about 1.1 m above "
+             "the floor, 0.39 m ahead of your pelvis and 0.06 m to its right; the right hand's fingers point forwards "
+             "under it, curled a little round it (grip value 0.3), the left hand's palm is on its left side, open "
+             "(grip value 0); the start command keeps that hold. A grip value is that hand's closure command: 0 opens "
+             "the fingers, 1 closes every finger and the thumb until they meet something.")
+    difficulty = ("The ball keeps 85 % of its speed in a bounce but a hand absorbs it, so every touch has to push it "
+                  "down and forward again by the hand's own motion to where the hand will be, with a hand about 8 cm "
+                  "wide and a ball 24 cm across, for 14 m, on a body whose walking gait covers about 0.7 m/s, drifts in heading, and is "
+                  "disturbed by every push of the arm. The built-in walking gait steps on the spot even at a zero "
+                  "command, so the ball has to leave the hands before it starts.")
 
     def build(self, sc):
         p = self.p
@@ -299,11 +363,17 @@ class Task(TaskBase):
         hx = -p["start_from_end_line_m"] + COURT["ring_x"]
         self.axis_y = -p["start_from_basket_axis_m"]
         self.hoop = build_court(sc, hx, self.axis_y, p, flip=True)
-        sc.ball("ball", "basketball", (0.6, -0.17, 1.13), grippable=True)
+        sc.ball("ball", "basketball", (0.42, 0.0, 1.28))         # nothing is grippable: the hands hold it
+        sc.real_hands["left"] = sc.real_hands["right"] = "inspire"   # the H1-2's own hands (rfo.realhand)
+        for side in ("left", "right"):
+            ET.SubElement(sc.root.find("contact"), "pair", name=f"palm_ball_{side}", geom1="ball",
+                          geom2=PALM_GEOM.format(side=side), condim="6",
+                          friction=f"{PALM_MU} {PALM_MU} 0.003 {BALL['roll']} {BALL['roll']}", solref=PALM_SOLREF,
+                          solimp=PALM_SOLIMP)
         sc.camera("venue", (5.0, 9.5, 5.5), (6.5, -1.0, 0.5), fovy=60)
 
     def reset(self, w):
-        ball_in_hand(w)
+        ball_in_hands(w)
 
     def referee_reset(self, w, ref):
         p = self.p
@@ -318,11 +388,14 @@ class Task(TaskBase):
         self.y_lo, self.y_hi = self.axis_y - p["court_width_m"] / 2, self.axis_y + p["court_width_m"] / 2
         travel = Travel(w, ref, p["step_gap_s"], 2, p["pivot_slide_m"])
         travel.start("pivot")
-        self.trackers = {"hand": Touch(ref, self.ball, self.hands, gap=p["touch_gap_s"]), "travel": travel,
-                         "released": None, "floor_since_hand": False, "touches": 0, "foot_x": {}}
+        self.trackers = {"hand": None, "travel": travel, "touch": {"left": 0.0, "right": 0.0}, "released": None,
+                         "floor_since_hand": False, "touches": 0, "foot_x": {}, "under_since": None,
+                         "under_last": None}
 
-    def may_grip(self, w, side, name):
-        return self.trackers.get("released") is None       # after the release the ball is only ever pushed
+    def on_ball(self, ref) -> dict:
+        """Which hands are on the ball now (touching it, gaps shorter than touch_gap_s included)."""
+        t = self.trackers["touch"]
+        return {s: t[s] is not None and ref.time - t[s] <= self.p["touch_gap_s"] + 1e-9 for s in ("left", "right")}
 
     def _out(self, pts) -> bool:
         return bool(len(pts)) and bool(np.any((pts[:, 0] <= self.x_end) | (pts[:, 1] <= self.y_lo)
@@ -337,15 +410,24 @@ class Task(TaskBase):
                 tr["foot_x"][s] = round(float(np.min(pts[:, 0])), 4)
         if self._out(ref.contact_points(self.robot, ref.ground)):
             return ref.fail("out of bounds: you touched the floor on or outside a boundary line")
-        if tr["released"] is None:
-            if bad or tr["travel"].pivot_up:
-                return ref.fail(bad or "travelling: the pivot foot left the floor before the ball was released")
-            if w.holder("ball"):
-                return
-            tr["released"] = ref.time
-            tr["travel"].stop()
         b = w.pos("ball")
         floor_pts = ref.contact_points(self.ball, ref.ground)
+        if tr["released"] is None:
+            for s in ("left", "right"):
+                if ref.touching(self.hand[s], self.ball):
+                    tr["touch"][s] = round(ref.time, 4)
+            if bad or tr["travel"].pivot_up:
+                return ref.fail(bad or "travelling: the pivot foot left the floor before the ball left your hands")
+            if ref.touching(self.ball, self.body):
+                return ref.fail("the ball touched a part of you other than a hand while in your hands",
+                                parts=sorted(ref.parts_touching(self.ball) - {"left_hand", "right_hand"}))
+            if len(floor_pts):
+                return ref.fail("the ball touched the floor while in your hands")
+            if any(self.on_ball(ref).values()):
+                return
+            tr["released"] = round(ref.time, 4)            # the ball has left the hands: the dribble's first touch
+            tr["travel"].stop()
+            tr["hand"] = Touch(ref, self.ball, self.hands, gap=p["touch_gap_s"])
         if self._out(floor_pts):
             return ref.fail("out of bounds: the ball touched the floor on or outside a boundary line")
         if ref.touching(self.ball, self.body):
@@ -354,21 +436,31 @@ class Task(TaskBase):
         pel = w.pelvis()
         gap = math.hypot(b[0] - pel[0], b[1] - pel[1])
         if gap > p["control_radius_m"]:
-            return ref.fail("the ball got away: it was further from you than the control distance", distance_m=round(gap, 3))
+            return ref.fail("the ball got away: it was further from you than the control distance",
+                            distance_m=round(gap, 3))
         hand = tr["hand"]
         if ref.touching(self.ball, self.hand["left"]) and ref.touching(self.ball, self.hand["right"]):
             return ref.fail("both hands touched the ball at the same time")
         if hand.update():
-            if hand.count > 1 or ref.time - tr["released"] > p["touch_gap_s"]:      # (not the releasing hand's own contact)
-                if not tr["floor_since_hand"]:
-                    return ref.fail("a hand touched the ball twice without the ball touching the floor in between")
-                tr["touches"] += 1
-                ref.metrics["dribbles"] = tr["touches"]
-                ref.stage("dribble")
+            if not tr["floor_since_hand"]:
+                return ref.fail("a hand touched the ball twice without the ball touching the floor in between")
+            tr["touches"] += 1
+            ref.metrics["dribbles"] = tr["touches"]
+            ref.stage("dribble")
         if hand.active and ref.touching(self.ball, self.hands):
             tr["floor_since_hand"] = False
             if hand.duration > p["hand_touch_max_s"]:
-                return ref.fail("the ball came to rest in a hand: a touch lasted too long", touch_s=round(hand.duration, 3))
+                return ref.fail("the ball came to rest in a hand: a touch lasted too long",
+                                touch_s=round(hand.duration, 3))
+        pts = ref.contact_points(self.hands, self.ball)              # carrying: a hand under the ball (Art. 24.1.3),
+        if len(pts) and float(np.min(pts[:, 2])) < b[2] - p["carry_depth"] * BALL["radius"]:   # gaps < touch_gap_s
+            if tr["under_since"] is None or ref.time - tr["under_last"] > p["touch_gap_s"] + 1e-9:   # included
+                tr["under_since"] = round(ref.time, 4)
+            tr["under_last"] = round(ref.time, 4)
+            if ref.time - tr["under_since"] > p["carry_s"] + 1e-9:
+                return ref.fail("carrying: a hand under the ball", under_s=round(ref.time - tr["under_since"], 3))
+        elif tr["under_since"] is not None and ref.time - tr["under_last"] > p["touch_gap_s"] + 1e-9:
+            tr["under_since"] = None
         if len(floor_pts):
             if not ref.touching(self.ball, self.hands):
                 tr["floor_since_hand"] = True
@@ -387,5 +479,5 @@ class Task(TaskBase):
     def privileged(self, w):
         tr = self.trackers
         return {"ball": w.pos("ball").tolist(), "ball_velocity": w.vel("ball").tolist(), "dribbles": tr["touches"],
-                "released": tr["released"] is not None, "end_line_x": self.x_end, "frontcourt_x": self.x_front,
-                "side_lines_y": [self.y_lo, self.y_hi]}
+                "hands_on_ball": self.on_ball(w.ref), "released": tr["released"] is not None,
+                "end_line_x": self.x_end, "frontcourt_x": self.x_front, "side_lines_y": [self.y_lo, self.y_hi]}

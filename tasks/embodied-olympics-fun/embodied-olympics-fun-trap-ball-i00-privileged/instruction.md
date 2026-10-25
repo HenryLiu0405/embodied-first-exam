@@ -7,7 +7,7 @@ This is a *fixed instance*: the same venue and start every time. You may reset a
 Your deliverable is **one replayable trajectory**, not a general policy.
 
 ## The venue
-You face +x on level grass. The ball waits 15 m ahead of you, half a metre to the right of the line you face along. About 3 s after the start it is passed straight back along that line; it reaches you about 2.1 s later, still rolling at about 6 m/s, half a metre to the right of your pelvis (about 0.35 m outside your right foot).
+You face +x on level grass. The ball machine stands 15 m ahead of you, its wheels half a metre to the right of the line you face along, aimed back along it. About 3.2 s after the start the pass leaves it; it reaches you about 2.0 s later, rolling at about 6.0 m/s, half a metre to the right of your pelvis (about 0.35 m outside your right foot).
 
 Frame: metres; the origin is on the floor under your pelvis at the start, +x is the way you face at the start, +y is
 to your left, +z is up; the floor is z = 0. 
@@ -15,10 +15,10 @@ to your left, +z is up; the floor is z = 0.
 ## The rules
 **Rule book:** IFAB Laws of the Game 2025/26: Law 2 (a size-5 ball: 68-70 cm round, 410-450 g), Law 12 (handball: the hand or the arm), Law 13 (9.15 m from the ball until it is in play) and the glossary (a kick is a contact with the foot or the ankle). Receiving a pass is a skill, not a rule-book event: the pass and the control standard (first touch with a foot, the ball at rest within 1 m inside 3 s) are the benchmark's. Where this task departs from it:
 
-- The pass is a scripted launch: a ball that rolls without slipping at 8.0 m/s from 15.0 m, the same in every attempt, instead of a team-mate; the pitch is level and uniform (the official ball's rolling resistance, no bobble), no wind.
-- Law 13's distance is applied to the robot itself: until the pass is played it stays 9.15 m from the ball, so that the pass is played, not met at the passer.
+- The pass is played by a two-wheel football machine standing on the grass 15.0 m away instead of a team-mate, the same in every attempt: its wheels drive the ball out 0.55 m above the grass, nearly level, at about 9.6 m/s with topspin (the two wheels give it at most about 35 rad/s, less than a rolling ball's): it skids and hops low along the grass and reaches the robot at about 6.0 m/s, as the family's former 8 m/s rolling pass did. The pitch is level and uniform (the official ball's rolling resistance, no bobble), no wind.
+- Law 13's distance is applied to the robot itself: until the pass is played it stays 9.15 m from the ball machine, so that the pass is played, not met at the machine.
 
-A size-5 football (0.22 m across, 0.43 kg) waits on the ground 15.0 m ahead of you and 0.5 m to your right; 3.0 s after the start it is passed along the ground, rolling at 8.0 m/s, parallel to the way you face, so that it goes by 0.5 m to the right of where you stand. Your first touch must be with a foot or an ankle (the parts below the shin). After it you may play the ball as often as you like with any part of you except the hands and the arms. You succeed when, within 3.0 s of the first touch, the ball is under control: slower than 0.2 m/s for 0.5 s without a break, its centre all that time within 1.0 m of your pelvis (measured along the ground), you on your feet. You fail if the first part of you that the ball touches is not a foot or an ankle, if a hand or an arm touches the ball at any time (handball), if 3.0 s after the first touch the ball is not under control, if your pelvis comes within 9.15 m of the waiting ball before it is passed, if you fall (your pelvis lower than 0.35 m above the ground, or any part of you other than the feet on the ground), or after 10 s. The waiting ball cannot be touched.
+A size-5 football (0.22 m across, 0.43 kg) waits in a ball machine 15.0 m ahead of you and 0.5 m to your right; about 3.2 s after the start the machine plays it along the ground at about 9.6 m/s, parallel to the way you face, so that it goes by 0.5 m to the right of where you stand. Your first touch must be with a foot or an ankle (the parts below the shin). After it you may play the ball as often as you like with any part of you except the hands and the arms. You succeed when, within 3.0 s of the first touch, the ball is under control: slower than 0.2 m/s for 0.5 s without a break, its centre all that time within 1.0 m of your pelvis (measured along the ground), you on your feet. You fail if the first part of you that the ball touches is not a foot or an ankle, if a hand or an arm touches the ball at any time (handball), if 3.0 s after the first touch the ball is not under control, if your pelvis comes within 9.15 m of the ball machine before the pass has left it, if you touch the machine or the waiting ball, if you fall (your pelvis lower than 0.35 m above the ground, or any part of you other than the feet on the ground), or after 10 s.
 
 A referee decides this from the simulator's state after every physics step (1 ms): the events that must happen, in
 order, are **first touch → control**. The attempt ends at the success (that moment is the success), at the first rule violation,
@@ -84,31 +84,31 @@ Joint order everywhere (Unitree's SDK order), with each joint's range, speed lim
 
 | # | joint | range (rad) | speed (rad/s) | torque (N m) | kp | kd | at the start (rad) |
 |---|---|---|---|---|---|---|---|
-| 0 | `left_hip_yaw` | [-0.43, 0.43] | 23 | 200 | 800 | 10 | 0 |
-| 1 | `left_hip_pitch` | [-3.14, 2.5] | 23 | 200 | 800 | 10 | -0.16 |
-| 2 | `left_hip_roll` | [-0.43, 3.14] | 23 | 200 | 800 | 10 | 0 |
-| 3 | `left_knee` | [-0.26, 2.05] | 14 | 300 | 1200 | 16 | 0.36 |
-| 4 | `left_ankle_pitch` | [-0.8973, 0.5236] | 9 | 60 | 160 | 8 | -0.2 |
+| 0 | `left_hip_yaw` | [-0.43, 0.43] | 23 | 360 | 800 | 10 | 0 |
+| 1 | `left_hip_pitch` | [-3.14, 2.5] | 23 | 360 | 800 | 10 | -0.16 |
+| 2 | `left_hip_roll` | [-0.43, 3.14] | 23 | 360 | 800 | 10 | 0 |
+| 3 | `left_knee` | [-0.26, 2.05] | 14 | 360 | 1200 | 16 | 0.36 |
+| 4 | `left_ankle_pitch` | [-0.8973, 0.5236] | 9 | 66.88 | 160 | 8 | -0.2 |
 | 5 | `left_ankle_roll` | [-0.2618, 0.2618] | 9 | 40 | 160 | 8 | 0 |
-| 6 | `right_hip_yaw` | [-0.43, 0.43] | 23 | 200 | 800 | 10 | 0 |
-| 7 | `right_hip_pitch` | [-3.14, 2.5] | 23 | 200 | 800 | 10 | -0.16 |
-| 8 | `right_hip_roll` | [-3.14, 0.43] | 23 | 200 | 800 | 10 | 0 |
-| 9 | `right_knee` | [-0.26, 2.05] | 14 | 300 | 1200 | 16 | 0.36 |
-| 10 | `right_ankle_pitch` | [-0.8973, 0.5236] | 9 | 60 | 160 | 8 | -0.2 |
+| 6 | `right_hip_yaw` | [-0.43, 0.43] | 23 | 360 | 800 | 10 | 0 |
+| 7 | `right_hip_pitch` | [-3.14, 2.5] | 23 | 360 | 800 | 10 | -0.16 |
+| 8 | `right_hip_roll` | [-3.14, 0.43] | 23 | 360 | 800 | 10 | 0 |
+| 9 | `right_knee` | [-0.26, 2.05] | 14 | 360 | 1200 | 16 | 0.36 |
+| 10 | `right_ankle_pitch` | [-0.8973, 0.5236] | 9 | 66.88 | 160 | 8 | -0.2 |
 | 11 | `right_ankle_roll` | [-0.2618, 0.2618] | 9 | 40 | 160 | 8 | 0 |
 | 12 | `torso` | [-2.35, 2.35] | 23 | 200 | 600 | 15 | 0 |
-| 13 | `left_shoulder_pitch` | [-3.14, 1.57] | 9 | 40 | 300 | 6 | 0 |
-| 14 | `left_shoulder_roll` | [-0.38, 3.4] | 9 | 40 | 300 | 6 | 0 |
-| 15 | `left_shoulder_yaw` | [-2.66, 3.01] | 20 | 18 | 200 | 4 | 0 |
-| 16 | `left_elbow_pitch` | [-0.95, 3.18] | 20 | 18 | 200 | 4 | 0 |
-| 17 | `left_elbow_roll` | [-3.01, 2.75] | 31.4 | 19 | 80 | 1.5 | 0 |
+| 13 | `left_shoulder_pitch` | [-3.14, 1.57] | 9 | 130 | 300 | 6 | 0 |
+| 14 | `left_shoulder_roll` | [-0.38, 3.4] | 9 | 60 | 300 | 6 | 0 |
+| 15 | `left_shoulder_yaw` | [-2.66, 3.01] | 20 | 60 | 200 | 4 | 0 |
+| 16 | `left_elbow_pitch` | [-0.95, 3.18] | 20 | 60 | 200 | 4 | 0 |
+| 17 | `left_elbow_roll` | [-3.01, 2.75] | 31.4 | 60 | 80 | 1.5 | 0 |
 | 18 | `left_wrist_pitch` | [-0.47, 0.47] | 31.4 | 19 | 60 | 1 | 0 |
 | 19 | `left_wrist_yaw` | [-1.27, 1.27] | 31.4 | 19 | 60 | 1 | 0 |
-| 20 | `right_shoulder_pitch` | [-3.14, 1.57] | 9 | 40 | 300 | 6 | 0 |
-| 21 | `right_shoulder_roll` | [-3.4, 0.38] | 9 | 40 | 300 | 6 | 0 |
-| 22 | `right_shoulder_yaw` | [-3.01, 2.66] | 20 | 18 | 200 | 4 | 0 |
-| 23 | `right_elbow_pitch` | [-0.95, 3.18] | 20 | 18 | 200 | 4 | 0 |
-| 24 | `right_elbow_roll` | [-2.75, 3.01] | 31.4 | 19 | 80 | 1.5 | 0 |
+| 20 | `right_shoulder_pitch` | [-3.14, 1.57] | 9 | 130 | 300 | 6 | 0 |
+| 21 | `right_shoulder_roll` | [-3.4, 0.38] | 9 | 60 | 300 | 6 | 0 |
+| 22 | `right_shoulder_yaw` | [-3.01, 2.66] | 20 | 60 | 200 | 4 | 0 |
+| 23 | `right_elbow_pitch` | [-0.95, 3.18] | 20 | 60 | 200 | 4 | 0 |
+| 24 | `right_elbow_roll` | [-2.75, 3.01] | 31.4 | 60 | 80 | 1.5 | 0 |
 | 25 | `right_wrist_pitch` | [-0.47, 0.47] | 31.4 | 19 | 60 | 1 | 0 |
 | 26 | `right_wrist_yaw` | [-1.27, 1.27] | 31.4 | 19 | 60 | 1 | 0 |
 
@@ -134,11 +134,7 @@ What the platform does and does not do for you:
   what bounds the joint itself is the motor's torque-speed curve (a `lowcmd` feed-forward torque can turn a joint up to
   about 1.15 times that speed, where the motor's torque has fallen to zero).
 - **The hands** have no working fingers here; each carries a fist pad (a box of 4.4 × 8 × 10 cm beyond the wrist, the
-  10 cm along the forearm) with a grip: while `grip_left` / `grip_right` ≥ 0.5 the hand holds the nearest grippable
-  object whose surface is within 3.5 cm of the palm point (the middle of the pad, 4.5 cm beyond the wrist flange along
-  the forearm) and that moves at most 6 m/s relative to it; below 0.5 it lets go at once. Since the palm point is inside
-  the pad, an object can be gripped where it touches one of the pad's two broad faces, not at its narrow sides or its
-  far end. What is grippable is the task's own equipment, named in the rules.
+  10 cm along the forearm). Nothing in this task is grippable: `grip_left` and `grip_right` have no effect.
 - **A tool on a hand** (a racket, a paddle, a club; where the task has one) is fixed to the wrist in place of the pad.
   It collides with the world, the ball and the rest of your own body.
 - **The air** is real: balls and implements feel drag and, when they spin, lift.

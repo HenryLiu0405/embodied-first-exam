@@ -3,7 +3,7 @@ artifacts = [{ source = "/var/rcb-monitor/", service = "rcb_monitor" }, "/app/ou
 
 [task]
 name = "embodied-first-exam/embodied-olympics-fun-shot-put-i00-privileged"
-description = "Embodied Olympics shot-put (one Unitree H1-2 on the Embodied Olympics simulator, MuJoCo 3.3.7, CPU) in privileged mode: produce one replayable trajectory. Put the shot that your right hand holds at your neck, from the shoulder with that hand alone, so that it lands inside the sector at least 6.0 m from the circle, then leave the circle from its rear half and stand. A referee of events, geometry and contact rules decides the success."
+description = "Embodied Olympics shot-put (one Unitree H1-2 on the Embodied Olympics simulator, MuJoCo 3.3.7, CPU) in privileged mode: produce one replayable trajectory. Put the shot that rests on your open right palm at your neck, from the shoulder with that hand alone, so that it lands inside the sector at least 6.0 m from the circle, then leave the circle from its rear half and stand. A referee of events, geometry and contact rules decides the success."
 authors = [{ name = "Kangrui Wang" }]
 keywords = ["robotics", "embodied-olympics", "sports", "mujoco", "unitree-h1-2", "humanoid", "trajectory", "shot-put"]
 
@@ -20,8 +20,8 @@ network = "open"                 # the agent's egress (docs/protocol/README.md �
 # scene = environment/instance.json (the family's parameters + its t = 0 state hash); identity = the dataset.toml digest
 instance_seed = 0
 expert_time_estimate_hours = 8.0
-oracle = "full"
-oracle_evidence = "Reference: a standing put from a technique found offline by CMA-ES over whole-body key poses (Embodied Olympics' method): 8.1 m/s from 1.78 m, pushed (0.997), 8.20 m (the line is 6 m), then out of the rear half and standing. Open loop on the frozen start, not robust. Referee test: positive by injection; negatives: the shot lowered, taken behind the shoulders, a sling, the other hand, out early, toes on the board, outside the sector, short, a front-half exit Measured: success after 6.08 s of the 60 s limit, live and in a fresh replay, ending in the same state."
+oracle = "none"
+oracle_evidence = "no reference solution; the referee is tested: No reference solution: a CMA-ES search over the four key poses, their times and the legs' drive keys (about 160 generations) finds legal puts of 6.1-6.8 m only with a hand passing through the robot's own body (the right thumb up to 4.7 cm into the right shoulder during the crouch, the left hand up to 6.8 cm into the right hip in the follow-through), which the robot's self-collision rules out; with a penalty for that, no clean put was found. Positive by a declared magic action. The real parts: the stance held by the walking policy with the shot on the open right palm, then after the release the walk backwards out of the rear half and the stand. The injected part, once at 0.5 s: the shot's velocity on the palm set to 8.0 m/s at 38 deg along the robot's heading. It leaves the palm at 7.9 m/s from 1.58 m (push fraction 0.78) and lands 6.29 m from the rim; the same state hash twice. Negatives: nop (time), a 1 m/s put (touched after the release), 30 deg to the side (outside the sector), the arm lowered or taken back, the other hand, the stop board, short, a fall after the landing.; human review in the pull request that adds the benchmark (PROTOCOL §2.7)"
 
 [metadata.resources]
 # minimum compute to run this task (docs/protocol/README.md §2.9)
@@ -60,7 +60,7 @@ main = { cpus = 8.0, memory_gb = 16.0, pids = 8192 }
 # from (a list, { from = A, to = B } or "any"), and the ones the reference solution under solution/ is for
 default = 0
 allowed = [0]
-oracle = [0]
+oracle = []
 
 [verifier]
 timeout_sec = 900.0

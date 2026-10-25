@@ -15,7 +15,7 @@
 Walk along the balance beam from the end you stand on to the other end and stand there, without anything touching the floor. (Embodied Olympics `balance-beam`: one Unitree G1 on the Embodied Olympics simulator, judged by a referee of events, geometry and contact rules.)
 
 ## Difficulty
-The beam is 0.1 m wide and the robot's built-in stance and gait keep the feet 0.24 m apart, so neither can be used: every step is a single-leg balance on a sole 0.07 m wide, 1.25 m above the floor, for 5.0 m. No controller of this robot is known to do it.
+The beam is 0.1 m wide and the robot's built-in stance and gait keep the feet 0.24 m apart, so neither can be used: every step is a single-leg balance on a sole 0.07 m wide, 1.25 m above the floor, for 5.0 m.
 
 ## Reference solution
 None. No reference controller exists for this family yet: positive by injection (the robot slid along the 10 cm beam in its tandem pose, 4 mm per step); negatives: `stand` mode (off in 1.5 s), the walking policy (off in 0.5 s), stopping short, past the end, lying on it, beside it. The tandem hold on joint targets is stable; a real walk on a 10 cm beam was not attempted.
@@ -47,5 +47,5 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | Instance | `environment/instance.json` = `tests/instance.json`: the family's parameters, t = 0 state hash `d1ddd243c9b81253d842716ba927caa57f99a6d134612ae0a95d424d882171d8` |
 | Episode | 9000 control steps (90 s at 100 Hz) |
 | Action | sim rows of 151 floats per control step (`rfo/world.py`); six action types are views of it |
-| Tooling | `/opt/tools/rcb_rfo.py`, `/opt/tools/rfo/` (the world, the action layer, the referee's toolkit; from the files-only image images/embodied-olympics-fun-files/, built from embodied_first_exam/embodied-olympics-fun/) and `environment/rfo_task.py` (this family's rules), the same files in the verifier's `/tests/` |
+| Tooling | `/opt/tools/rcb_rfo.py`, `/opt/tools/rfo/` (the world, the action layer, the referee's toolkit; from the files-only image images/embodied-olympics-fun-files/, built from embodied_first_exam/benchmarks/embodied-olympics-fun/) and `environment/rfo_task.py` (this family's rules), the same files in the verifier's `/tests/` |
 | Network | open: agents may search for and download public tools, robot models and pretrained controllers (owner, 2026-10-11; tasks/embodied-olympics-fun/README.md) |

@@ -7,7 +7,7 @@
 | Twin | `embodied-olympics-fun-balance-board-i00-privileged` |
 | Simulator / robot | `mujoco` / `unitree-g1` |
 | Family / instance | `balance_board` / seed 0 |
-| Oracle | `none` — no reference solution; the referee is tested: positive by injection (a spring-damper force on the torso, a helper's hand, for the 30 s); negatives: the do-nothing agent (the deck is down at 2.6 s), the walking policy, leaning, left alone after 20 s, off the board. A linear feedback on leg sway rides the full 30 s from the exact start but falls after 14 to 28 s when started 1 mm off, so it is not shipped as a reference solution; human review in the pull request that adds the benchmark (PROTOCOL §2.7) |
+| Oracle | `none` — no reference solution; the referee is tested: the start is just after a mount: the deck 3 degrees from level with its left end low, the robot standing square on it and tilted with it, its centre of mass 4.2 cm left of the roller's line of contact; left alone the deck is down at 0.8 s. Positive by injection (a spring-damper force on the torso, a helper's hand, for the 30 s: the deck brought level, at most 3.0 degrees); negatives: the do-nothing agent, the walking policy, the weight over one end, left alone after 20 s, off the board, lying on the deck. A feedback tuned for an exactly level start, which holds the board there without visible motion, falls at 0.85 s from this start, as does a linear ride; human review in the pull request that adds the benchmark (PROTOCOL §2.7) |
 | Agent time budget | 7200 s; tokens: protocol default (PROTOCOL §5) |
 | Base image | `ghcr.io/mll-lab-nu/efe:embodied-olympics-fun-0.2.1` |
 
@@ -15,7 +15,7 @@
 Stay balanced on the roller board for 30.0 s: neither end of the deck nor any part of you may touch the floor. (Embodied Olympics `balance-board`; the robot as a service: its head cameras, joint sensors and IMUs, and the venue's fixed camera only.)
 
 ## Difficulty
-Two unstable motions are coupled: the deck tilts on the roller and the roller rolls away under the deck. Neither the platform's stance nor the walking policy corrects them; the legs have to shift the body's weight against the board fast enough to keep the roller between the feet for 30.0 s. In standard mode the agent has no simulator and no state: it sees through the robot's cameras, acts through the client, and has 50 resets (only the last attempt is graded).
+Two unstable motions are coupled: the deck tilts on the roller and the roller rolls away under the deck. Neither the platform's stance nor the walking policy corrects them; the legs have to shift the body's weight against the board fast enough to keep the roller between the feet for 30.0 s. In standard mode the agent has no simulator and no state: it sees through the robot's cameras, acts through the client, and has 5 resets (only the last attempt is graded).
 
 ## Reference solution
 None (as `embodied-olympics-fun-balance-board-i00-privileged`).
@@ -44,9 +44,9 @@ Minimum allocation for one trial (docs/protocol/README.md §2.9; `[metadata.reso
 | | |
 |---|---|
 | Category | parkour-apparatus-balance |
-| Rule book | No federation rule book: the roller balance board (Indo Board style rocker-roller trainer): a rigid deck 0.76 m x 0.38 m lying loose on a free roller of 0.085 m radius, with a stop under each end of the deck; the standard is the balance trainer's: time on the board with neither end of the deck nor the rider touching the floor; deviations: the board: deck and roller are rigid bodies (a 2.7 kg box and a 1.8 kg hollow cylinder) with a friction coefficient of 1.0 between deck, roller and floor, without grip tape or a rubber-lined roller, because the simulator has rigid bodies only · the mount: the robot starts standing on the level deck, centred over the roller (an unstable equilibrium), instead of stepping onto a deck that rests on one end, because the task is the ride, a single action |
+| Rule book | No federation rule book: the roller balance board (Indo Board style rocker-roller trainer): a rigid deck 0.76 m x 0.38 m lying loose on a free roller of 0.085 m radius, with a stop under each end of the deck; the standard is the balance trainer's: time on the board with neither end of the deck nor the rider touching the floor; deviations: the board: deck and roller are rigid bodies (a 2.7 kg box and a 1.8 kg hollow cylinder) with a friction coefficient of 1.0 between deck, roller and floor, without grip tape or a rubber-lined roller, because the simulator has rigid bodies only · the mount: a rider steps onto a deck that rests on one end and rolls it up to level; the robot does not step on: it starts standing square on the deck just after that mount, the deck 3.0 degrees from level with its left end low, resting on the roller under its middle, the robot tilted with it (feet flat on the deck), its centre of mass about 4 cm left of the roller's line of contact and everything at rest; it has to bring the board level itself. The start is the same in every trial (no random perturbation), because a trial is one frozen instance |
 | Stages | 10 s → 20 s → 30 s |
 | Service | `environment/sim/server.py` (the Embodied Olympics adapter) on `rcb_service.py` (eai-standard/2.1), `rcb_rfo.py`, `rfo/`, `rfo_task.py`, `instance.json` (= the privileged twin's) |
 | Observations | `head_left`, `head_right` (RGB 270 × 480, depth on `head_left`), `venue` (fixed); proprioception: joints, torques, targets, two IMUs, grip state |
-| Episode | 3050 control steps (30.5 s at 100 Hz); 50 resets, the last attempt graded |
+| Episode | 3050 control steps (30.5 s at 100 Hz); 5 resets, the last attempt graded |
 | Network | open: agents may search for and download public tools, robot models and pretrained controllers (owner, 2026-10-11; tasks/embodied-olympics-fun/README.md) |

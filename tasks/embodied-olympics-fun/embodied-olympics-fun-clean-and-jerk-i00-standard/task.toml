@@ -7,6 +7,9 @@ artifacts = [{ source = "/var/rcb-monitor/", service = "rcb_monitor" },
   { source = "/data/referee.json", service = "sim" },
   { source = "/data/replay.mp4", service = "sim" },
   { source = "/data/replay.last.png", service = "sim" },
+  { source = "/data/trajectory.first.npz", service = "sim" },
+  { source = "/data/replay.first.mp4", service = "sim" },
+  { source = "/data/replay.first.last.png", service = "sim" },
   { source = "/data/calls/", service = "sim" },
   { source = "/data/startups.jsonl", service = "sim" },
   { source = "/data/crash.log", service = "sim" },
@@ -15,7 +18,7 @@ artifacts = [{ source = "/var/rcb-monitor/", service = "rcb_monitor" },
 
 [task]
 name = "embodied-first-exam/embodied-olympics-fun-clean-and-jerk-i00-standard"
-description = "STANDARD MODE (robot as a service, eai-standard/2.1): Embodied Olympics clean-and-jerk on the same frozen instance as embodied-olympics-fun-clean-and-jerk-i00-privileged. Clean and jerk the barbell: lift it from the platform to your shoulders, then to locked arms overhead, and hold it there motionless until the down signal. The agent only gets a client: the robot's two head cameras (depth on one), its joint sensors and IMUs, the venue's fixed camera, and action chunks (walking, running, joint targets, Unitree LowCmd, the hands' grip). 50 resets, the last attempt graded; no object state, no referee state during an attempt. The sim service records the attempt and grades it live with the family's referee (no grading replay)."
+description = "STANDARD MODE (robot as a service, eai-standard/2.1): Embodied Olympics clean-and-jerk on the same frozen instance as embodied-olympics-fun-clean-and-jerk-i00-privileged. Clean and jerk the barbell: lift it from its blocks to your shoulders, then to locked arms overhead, and hold it there motionless until the down signal. The agent only gets a client: the robot's two head cameras (depth on one), its joint sensors and IMUs, the venue's fixed camera, and action chunks (walking, running, joint targets, Unitree LowCmd, the hands' grip). 5 resets, the last attempt graded; no object state, no referee state during an attempt. The sim service records the attempt and grades it live with the family's referee (no grading replay)."
 authors = [{ name = "Kangrui Wang" }]
 keywords = ["robotics", "embodied-olympics", "sports", "mujoco", "unitree-h1-2", "humanoid", "standard-mode", "trajectory", "clean-and-jerk"]
 
@@ -31,10 +34,10 @@ dynamics = "static"               # scene dynamics (docs/protocol/README.md §2.
 network = "open"                 # the agent's egress (docs/protocol/README.md §2): open, the author's choice
 protocol = "eai-standard/2.1"
 instance_seed = 0
-reset_budget = 50
-expert_time_estimate_hours = 10.0
-oracle = "none"
-oracle_evidence = "no reference solution; the referee is tested: positive by injection (a crane force on the 45 kg barbell and a balance force on the trunk; the final 2 s are carried by the robot's own locked arms and legs); negatives: the bar off the platform without both hands, let go, down before the signal, overhead without a clean, bent elbows or knees, split feet, another part on the platform. At the shoulders the elbows need 34 of their 18 N m; overhead with straight arms the robot holds the bar about 1 s; human review in the pull request that adds the benchmark (PROTOCOL §2.7)"
+reset_budget = 5
+expert_time_estimate_hours = 16.0
+oracle = "full"
+oracle_evidence = "Reference (real, lowcmd rows, a quasi-static whole-body plan) for a block clean & jerk: the 5 kg technique bar on two 0.35 m lifting blocks (axis 0.375 m above the platform; declared: on 0.20 m blocks the squat would need the hips flexed past where the hip links meet the pelvis, and 52 squats tried all fell onto a thigh or knocked the bar). On 0.20 m blocks the planner's bottom poses put the hips 15 to 46 mm into the pelvis, or the thumbs into the knees. Heavier bars: with the women's 15 kg bar every path of the clean's turnover passes a pose with the bar level with the elbow joint, where the best arm pose found (with a gripper whose grip was 0.11 m further from the wrist) needs 1.08 to 1.17 times the elbow and shoulder motors' torque (0.54 with 5 kg); 10 kg (the bar on two 2.5 kg technique discs) topples the robot backwards at the turnover. It squats (knees 1.2 rad, pelvis 0.8 rad), closes the H1-2's own Inspire hands (their default forces, 20 N per fingertip, 30 N the thumb; no factor) round the bar, stands up, cleans to the shoulders, presses overhead and holds to the down signal: success at 20.29 s, no arm into the robot's own body; live, replay and the state hash agree. 4 of 7 neighbours succeed (servo gains x0.97 / x1.03, a squat at knees 1.4 / pelvis 0.9); a shallower squat, the bar 1 cm nearer or farther and the plan 10 % slower fail. Negatives: nop (time), the 0.20 m blocks' deeper squat (falls onto a thigh), the right hand never closed (no clean), both hands opened above knee height (let go), pushed over backwards, off the platform, the barbell on the floor, a foot on a block; stress: random arm targets at the rack. The privileged twin's reference rows (2029 control steps, success after 20.29 s) streamed through the client."
 
 [metadata.resources]
 # minimum compute to run this task (docs/protocol/README.md §2.9)
@@ -74,7 +77,7 @@ sim = { cpus = 4.0, memory_gb = 8.0, pids = 8192 }
 # from (a list, { from = A, to = B } or "any"), and the ones the reference solution under solution/ is for
 default = 0
 allowed = [0]
-oracle = []
+oracle = [0]
 
 [verifier]
 timeout_sec = 900.0

@@ -7,6 +7,9 @@ artifacts = [{ source = "/var/rcb-monitor/", service = "rcb_monitor" },
   { source = "/data/referee.json", service = "sim" },
   { source = "/data/replay.mp4", service = "sim" },
   { source = "/data/replay.last.png", service = "sim" },
+  { source = "/data/trajectory.first.npz", service = "sim" },
+  { source = "/data/replay.first.mp4", service = "sim" },
+  { source = "/data/replay.first.last.png", service = "sim" },
   { source = "/data/calls/", service = "sim" },
   { source = "/data/startups.jsonl", service = "sim" },
   { source = "/data/crash.log", service = "sim" },
@@ -15,7 +18,7 @@ artifacts = [{ source = "/var/rcb-monitor/", service = "rcb_monitor" },
 
 [task]
 name = "embodied-first-exam/embodied-olympics-fun-javelin-i00-standard"
-description = "STANDARD MODE (robot as a service, eai-standard/2.1): Embodied Olympics javelin on the same frozen instance as embodied-olympics-fun-javelin-i00-privileged. Throw the javelin in your right hand over the shoulder from behind the arc so that its head strikes the ground first, inside the sector, at least 20.0 m from the arc, then leave the runway behind the arc and stand. The agent only gets a client: the robot's two head cameras (depth on one), its joint sensors and IMUs, the venue's fixed camera, and action chunks (walking, running, joint targets, Unitree LowCmd, the hands' grip). 50 resets, the last attempt graded; no object state, no referee state during an attempt. The sim service records the attempt and grades it live with the family's referee (no grading replay)."
+description = "STANDARD MODE (robot as a service, eai-standard/2.1): Embodied Olympics javelin on the same frozen instance as embodied-olympics-fun-javelin-i00-privileged. Throw the javelin held by its cord in your right hand over the shoulder from behind the arc so that its head strikes the ground first, inside the sector, at least 20.0 m from the arc, then leave the runway behind the arc and stand. The agent only gets a client: the robot's two head cameras (depth on one), its joint sensors and IMUs, the venue's fixed camera, and action chunks (walking, running, joint targets, Unitree LowCmd, the hands' grip). 5 resets, the last attempt graded; no object state, no referee state during an attempt. The sim service records the attempt and grades it live with the family's referee (no grading replay)."
 authors = [{ name = "Kangrui Wang" }]
 keywords = ["robotics", "embodied-olympics", "sports", "mujoco", "unitree-h1-2", "humanoid", "standard-mode", "trajectory", "javelin"]
 
@@ -31,10 +34,10 @@ dynamics = "static"               # scene dynamics (docs/protocol/README.md §2.
 network = "open"                 # the agent's egress (docs/protocol/README.md §2): open, the author's choice
 protocol = "eai-standard/2.1"
 instance_seed = 0
-reset_budget = 50
-expert_time_estimate_hours = 10.0
-oracle = "full"
-oracle_evidence = "Reference: a standing throw by the trunk's turn, the hand above the shoulder, from a technique found offline by CMA-ES over whole-body key poses (Embodied Olympics' method): 15.0 m/s at 37 degrees, head first at 21.58 m (the line is 20 m), then back 4 m behind the arc and standing. Open loop on the frozen start, not robust. Referee test negatives: an underarm release, the back turned, over the arc, off the runway early, tail first, outside the sector, short, touched after the release, out in front The privileged twin's reference rows (1533 control steps, success after 15.33 s) streamed through the client."
+reset_budget = 5
+expert_time_estimate_hours = 14.0
+oracle = "none"
+oracle_evidence = "no reference solution; the referee is tested: The cord lies across the palm of the H1-2's own right Inspire hand (its default forces, 20 N per fingertip, 30 N the thumb), held by contact and friction. A fast overhand swing pulls the cord out of the hand: its load back-drives the finger drives to their self-locking limits and pulls the cord out across the fingers at about 1.14 s (before the commanded opening at 1.18 s), at 12-13 m/s pointing down, at 1x and equally at 2x these forces (so no factor up to 2x helps); a swing searched by CMA-ES (about 60 generations) reaches 9.8 m head first (the mark is 20 m). Positive by a declared magic action: real arm raised above the shoulder holding the javelin, the hand opened; injected once, the javelin moved 0.12 m up and given 17 m/s at 35 deg: it lands head first 31.6 m from the arc; the real walk back off the runway and stand; the same state hash twice. Negatives: nop, a release below the shoulder, the hand opened at the start, the back turned, walking over the arc, leaving the runway while it flies, tail first, outside the sector, short, touched after the release, out in front of the arc's ends, a fall. Stress: random arm targets with the hand closed: at most 0.4 mm into the fingers. The clean release (TR 38.1(a), held with one hand, not slung or hurled): the release is the javelin's last contact with any part of the robot after the hold ends (then 0.02 s free), with at most 0.2 s of unheld contact on the right arm in between; after it, brushes by the right arm in the 0.2 s grace may change its velocity by at most 0.5 m/s in all (the contact impulses, summed, over its mass). A model run's 21.2 m throw (the hold ended at 5.3 m/s, then batted by the opening hand to 20.8 m/s) fails: release at its last continuous contact (7.078 s, 8.6 m/s), then 'struck after the release' (5.1 m/s by contact at 7.109 s). Every rule above is judged in the family's own 1 ms substep hook.; human review in the pull request that adds the benchmark (PROTOCOL §2.7)"
 
 [metadata.resources]
 # minimum compute to run this task (docs/protocol/README.md §2.9)
@@ -74,7 +77,7 @@ sim = { cpus = 4.0, memory_gb = 8.0, pids = 8192 }
 # from (a list, { from = A, to = B } or "any"), and the ones the reference solution under solution/ is for
 default = 0
 allowed = [0]
-oracle = [0]
+oracle = []
 
 [verifier]
 timeout_sec = 900.0

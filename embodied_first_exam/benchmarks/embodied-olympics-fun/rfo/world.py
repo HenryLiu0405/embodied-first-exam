@@ -1,4 +1,4 @@
-"""The RoboOlympics world: one RoboOlympics Unitree G1 (the robot library's g1-4: Menagerie's 29-joint G1, its real
+"""The Embodied Olympics - Fun world: one Unitree G1 of the Embodied Olympics robot library (its g1-4: Menagerie's 29-joint G1, its real
 joint, speed and torque limits, its motor torque-speed curves, its self-collision) in a sports venue, the action
 layer every task shares, the hands' grip, and the stepping that the referee (referee.py) watches.
 
@@ -9,9 +9,9 @@ sim rows replays an episode bit-exactly in a fresh process. The agent's action t
 Who drives the joints (row[0], the mode):
   stand     the platform holds the legs in the stance (the walking policy's default leg angles on the stand gains with
             gravity support); the row's 17 waist and arm targets drive the upper body
-  walk      Unitree's own walking policy drives the legs from the row's velocity command (vx, vy, wz; RoboOlympics'
+  walk      Unitree's own walking policy drives the legs from the row's velocity command (vx, vy, wz; Embodied Olympics'
             joint-group arbiter, the handover to the policy included); the row's waist and arm targets drive the rest
-  run       RoboOlympics' athletics running policy drives all 29 joints from the velocity command
+  run       Embodied Olympics' athletics running policy drives all 29 joints from the velocity command
   run_arms  the running policy drives the legs and the waist; the row's 14 arm targets drive the arms
   joints    the row drives all 29 joints: position targets, velocity targets, feed-forward torques and PD gains
             (Unitree's LowCmd: tau = kp (q - q_meas) + kd (dq - dq_meas) + tau_ff), at 1 kHz
@@ -25,6 +25,7 @@ import importlib
 import json
 import math
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -49,14 +50,19 @@ from .referee import Referee  # noqa: E402
 from .scene import Scene  # noqa: E402
 
 # The robots of the library a task may use (Task.robot): the Unitree G1 (1.32 m, 33 kg, 29 joints; a walking and a running
-# policy) and the Unitree H1-2 (1.78 m, 67 kg, 27 joints; a walking policy), each with its real limits and motor curves.
+# policy) and the Unitree H1-2 (1.78 m, 67 kg, 27 joints; a walking policy; H2-class leg actuators, below), each
+# with its real limits and motor curves.
 ROBOTS = {
     "unitree_g1": dict(title="Unitree G1", height_m=1.32, run=True, walkers=True,
                        source="MuJoCo Menagerie's unitree_g1 with Unitree's joint, speed and torque limits and motor "
                               "torque-speed curves"),
     "unitree_h1": dict(title="Unitree H1-2", height_m=1.78, run=False, walkers=False,
-                       source="Unitree's own h1_2 model with its joint, speed and torque limits; its motor "
-                              "torque-speed curves are estimates"),
+                       source="the H1-2 body (Unitree's own h1_2 model, its joint ranges and speed limits) with Unitree "
+                              "H2 / H2-X-class leg actuators from the H2's official URDF (hips and knees 360 N m, "
+                              "ankle pitch 66.88 N m; curves of Unitree's M107 shape, 2.5 kW peak per joint) and "
+                              "H2-class arm actuators from the same URDF (shoulder pitch 130 N m; shoulder roll and "
+                              "yaw, elbow, forearm roll 60 N m; curves of Unitree's N7520 / N5020 shapes); the H1-2's "
+                              "own torso (M107-15, 200 N m), ankle roll and wrist pitch / yaw (estimates)"),
 }
 BODY = load_body("unitree_g1")
 ROBOT_REVISION = BODY.revision
@@ -101,6 +107,48 @@ GRIP_SPEED = 6.0                               # m/s: ... and that moves no fast
 FALL_Z = 0.35                                  # m: the pelvis below this is down (tasks that allow it say so)
 UNSTABLE = "the simulation became unstable"    # the referee's reason when the physics diverges (an attempt's failure)
 MAX_SPEED = 150.0                              # m/s: the robot or a prop faster than this is a divergence too
+# The robot's visible body where its collision model has no geometry: the H1-2's thighs and shins are four rods 4 cm
+# thick and 20 cm long plus two 1 cm discs (up to 0.44 m of visible thigh outside any collision geom), its knees, hips
+# and wrist motor housings have none; the G1's waist (yaw and roll links) and its shoulders' outer housings have none;
+# the hands (the G1's rubber fist, the H1-2's Inspire fingers: up to 77 mm outside the palm pad) are looks only.
+# A prop (a bar, a rope, a ball, a hurdle, an opponent) went through them. Each such visual mesh gets a shell: its
+# convex hull, massless, that touches only the props (contype 0, conaffinity SHELL_BIT; every prop but the ground gets
+# SHELL_BIT in its contype): not the floor or the ground, not the robot itself (self-collision, the feet on the ground
+# and the walking policies unchanged). The hands' shells too (the fist, the fingers: props only); the palm pad stays
+# the hand's model for holding.
+# The feet keep their own (the sole and the strike box), the hand mounts theirs (the palm pad, the task's tool or the
+# real hand, which replaces the fist / fingers); the torso's logo plate lies inside the torso's hull. A shell's contact
+# is stiff, a rigid prop on the robot's aluminium shell: solref 0.004 s (4 physics steps; MuJoCo keeps timeconst >= 2
+# timesteps stable), solimp 0.99 0.999 0.0005 (MuJoCo's default soft contact let a heavy bar sink 12-44 mm), and a
+# solmix that makes them win against a prop of default priority; a prop with a priority of its own (a ball: its bounce,
+# scene.py) keeps its own parameters.
+# Source: the Embodied Olympics weightlifting fix (CHIGUI0/roboolympics PR #179 at f54e26a8, sports/weightlifting/
+# venue.py `_shells` and BAR_CONTACT, MIT; library issue CHIGUI0/roboolympics #268): <= 3.2 mm at 190 kg.
+# The robot's own collision geoms (the body hulls, the palm pads, the feet's strike boxes, a real hand's housing and
+# fingers) get the same stiff contact (ROBOT_CONTACT) against props, mechanisms and fixtures (not the ground:
+# GROUND_SOLMIX): with MuJoCo's default (solref 0.02 1, solimp 0.9 0.95 0.001) a rigid prop or a machine's part sank
+# 20-75 mm into them (a stress test). Not the soles (contype 1: the G1's four sole
+# spheres, the H1-2's sole hulls; SOLE_CONTACT, below) nor a geom with a priority of its own (the real hand's pads).
+SHELL_BIT = 128                                 # a bit no family uses (they use 1-64)
+SHELL_CONTACT = dict(solref="0.004 1", solimp="0.99 0.999 0.0005 0.5 2", solmix="1e+06")
+ROBOT_CONTACT = SHELL_CONTACT
+# The soles (SOLE_CONTACT) keep the robot model's own contact (MuJoCo's default; the G1's sole spheres priority 1):
+# they sink 6 mm walking, 15 mm under FALCON, 54 mm stamping (random leg torques), the H1-2's 14 / 37 mm (114 mm in
+# the stress test). Stiffer soles were measured (a stress test; solref 0.01 / 0.005 / 0.004,
+# solimp 0.95-0.99 / 0.99-0.999, priority 1): every policy still does its job at every setting (G1: walk, FALCON and
+# AGILE 10 m, turn 360 deg, run 50 m; H1-2: walk 10 m, turn 360 deg) and at 0.004 / 0.99-0.999 the soles sink 0.4 mm
+# standing, 1.3 walking, 4.0 stamping, but open-loop controllers tuned on these soles (throws, kicks, serves,
+# sets) then fail; the soles keep the model's own contact.
+SOLE_CONTACT: dict | None = None
+# The ground keeps its own contact with everything: the ground and the fixed surfaces one stands
+# on (sc.ground, planes, height fields, fixed STANDABLE geoms: a beam, a platform, a vaulting table) of no priority
+# get GROUND_SOLMIX, so that in a contact with any geom of no priority (the robot's stiffened geoms, a family's rigid
+# prop) their own parameters (MuJoCo's default, or a mat's) win, as before the stiffening; a geom with a priority
+# (a ball, a sole, a mat of priority 1) keeps winning as before.
+GROUND_SOLMIX = "1e+12"
+SHELL_SKIP_BODY = ("ankle_roll_link", "_mount")         # no shell: the feet and the hand mounts (pads, tools, real hands)
+SHELL_SKIP_MESH = ("logo",)                             # the logo plate (mesh name); the hands (the G1's fist, the
+#                                                         H1-2's fingers) get shells like the rest (props only)
 GRIPS = ["grip_left", "grip_right"]
 VEL = ["vx", "vy", "wz"]
 
@@ -113,9 +161,431 @@ def walker_cmd(pol, cmd_max) -> tuple[np.ndarray, np.ndarray]:
     return np.maximum(np.asarray(lo, float)[:3], -cmd_max), np.minimum(np.asarray(pol.cmd_max, float)[:3], cmd_max)
 
 
+def _shells(root: ET.Element, ground: set, skip: set = frozenset()) -> None:
+    """The robot's shells (SHELL_BIT, above): one on every visual mesh of the robot that no collision geom of its own
+    body covers (the same mesh), named <body>_shell<i>; SHELL_BIT on the contype of every collidable geom outside the
+    robot but the ground (sc.ground, planes, height fields)."""
+    defaults: dict[str, dict] = {}                  # class -> its geom defaults (MuJoCo's inheritance)
+
+    def scan(el, name, inherited):
+        own = dict(inherited)
+        for g in el.findall("geom"):
+            own.update(g.attrib)
+        defaults[name] = own
+        for c in el.findall("default"):
+            scan(c, c.get("class"), own)
+
+    top = root.find("default")
+    if top is not None:
+        scan(top, "main", {})
+
+    def resolved(g, cls, key, dflt="1"):
+        return g.get(key, defaults.get(g.get("class") or cls, {}).get(key, dflt))
+
+    def robot(b):                                    # the robot's links (not the hand mounts: pads, tools, real hands)
+        name = b.get("name") or ""
+        if name.endswith("_mount"):
+            return
+        gs = b.findall("geom")
+        vis = [g for g in gs if g.get("mesh") and ((g.get("class") or "").endswith("_visual")
+                                                   or (g.get("contype") == "0" and g.get("conaffinity") == "0"))]
+        covered = {g.get("mesh") for g in gs if g.get("mesh") and g not in vis}
+        if not any(k in name for k in SHELL_SKIP_BODY) and name not in skip:     # (skip: a real hand's fingers)
+            for i, g in enumerate(x for x in vis if x.get("mesh") not in covered
+                                  and not any(k in x.get("mesh") for k in SHELL_SKIP_MESH)):
+                sh = ET.SubElement(b, "geom", name=f"{name}_shell{i}", type="mesh", mesh=g.get("mesh"), contype="0",
+                                   conaffinity=str(SHELL_BIT), group="3", mass="0", rgba="0.3 0.6 0.9 0.35",
+                                   **SHELL_CONTACT)
+                for a in ("pos", "quat", "euler", "axisangle", "xyaxes", "zaxis"):
+                    if g.get(a) is not None:
+                        sh.set(a, g.get(a))
+        for c in b.findall("body"):
+            robot(c)
+
+    def props(el, cls, fixed=True):
+        for g in el.findall("geom"):
+            ct, ca = int(resolved(g, cls, "contype")), int(resolved(g, cls, "conaffinity"))
+            if (fixed and (ct or ca) and not int(resolved(g, cls, "priority", "0"))
+                    and (g.get("name") in ground or resolved(g, cls, "type") in ("plane", "hfield")
+                         or (ct & 1 and ca & 4 and not ca & 8))):
+                g.set("solmix", GROUND_SOLMIX)       # the ground and the fixed surfaces one stands on (GROUND_SOLMIX)
+            if g.get("name") in ground or resolved(g, cls, "type") in ("plane", "hfield"):
+                continue
+            if ct or ca:
+                g.set("contype", str(ct | SHELL_BIT))
+        for c in el.findall("body"):
+            if c.get("name") != "pelvis":
+                moves = c.find("joint") is not None or c.find("freejoint") is not None
+                props(c, c.get("childclass") or cls, fixed and not moves)
+
+    def stiff(b, cls):                               # the robot's own collision geoms (ROBOT_CONTACT, SOLE_CONTACT)
+        cls = b.get("childclass") or cls
+        for g in b.findall("geom"):
+            ct = int(resolved(g, cls, "contype"))
+            if ct == 1:                              # a sole
+                for k, v in (SOLE_CONTACT or {}).items():
+                    g.set(k, v)
+            elif ct and not int(resolved(g, cls, "priority", "0")) and "_shell" not in (g.get("name") or ""):
+                for k, v in ROBOT_CONTACT.items():   # (not look-only, shells, geoms with a priority of their own)
+                    g.set(k, v)
+        for c in b.findall("body"):
+            stiff(c, cls)
+
+    wb = root.find("worldbody")
+    pelvis = next(b for b in wb.findall("body") if b.get("name") == "pelvis")
+    robot(pelvis)
+    props(wb, "main")
+    stiff(pelvis, pelvis.get("childclass") or "main")
+
+
+# Self-collision. The robot library's own pairs (bodies/selfcollision.py: body.toml [self_collision], named
+# selfcol_<i>) only cover the geoms that collide (contype 4): the G1's Menagerie hulls, the H1-2's thin thigh and shin
+# rods. The visible body around them is the shells (above: the G1's waist and shoulder housings and its rubber fists,
+# the H1-2's thighs, knees, hips, wrist housings and its Inspire fingers), and the hands are the palm pads, a task's
+# tool or a real hand, added here after the library: none of them touched the robot itself. A limb went through the
+# body: a shot-put stance with the thumb 2.3 cm inside the shoulder, a put 4.7 cm into it and the other hand
+# 6.8 cm into the hip, a volleyball set with the hands 5.7-6.4 cm into each other, the H1-2's arms through each other,
+# a flailing G1's knee 9 cm into its pelvis.
+# Now every collision geom and every shell of the robot takes part (the shells are the visual meshes' convex hulls:
+# the visible body), by the library's parts and rules (body.toml [self_collision]: arm x body (torso, pelvis, head,
+# legs), left arm x right arm (hands, pads, tools and real hands included: hand x hand), left leg x right leg, shin x
+# foot) and two more: a link x a link of the same arm (the library's same_arm, off for its own arms: a thumb into its
+# own shoulder, a forearm folded into the upper arm) and a leg x the body (a knee into the pelvis, a thigh on the
+# chest). A hand's own parts (a finger hand's thumb x its fingers) are the hand's (realhand.py). Excluded: two geoms of
+# one rigid group or of two groups joined by one joint (the library's automatic exclusion: the joint's housing), the
+# library's declared exclusions, HAND_CARRIER and SELF_EXCLUDE (below: hulls that overlap by construction two joints
+# apart, measured at the rest pose and over random legal poses, each with its reason).
+# The contact is the shells' stiff one (SHELL_CONTACT: the robot's rigid aluminium / plastic shell on itself; the
+# library's 0.005 s on MuJoCo's default solimp let a servo at its torque limit sink a hand 1-2 cm into the body), on
+# MuJoCo's default friction 1 (the library's choice for its pairs). One explicit <pair> per geom pair, so the
+# robot's geoms keep their contype / conaffinity: props, the ground and the walking policies see the same robot.
+SELF_PAIR = dict(condim="3", solref=SHELL_CONTACT["solref"], solimp=SHELL_CONTACT["solimp"])
+# A hand (its pad, tool or real hand, the H1-2's fingers) and the wrist links that carry it: the hand's own business
+# (its fingers close into the palm, whose hull is the wrist link's; a finger hand's own pairs, realhand.py); the
+# hand against the rest of its own arm (a thumb into its shoulder) stays enabled.
+HAND_CARRIER = re.compile(r"(left|right)_wrist_(roll|pitch|yaw)_link")
+# SELF_EXCLUDE: measured: every enabled body pair at the rest pose, and over 100 random
+# poses of only the joints between the two bodies (the rest at rest). Excluded are the pairs two joints apart whose
+# hulls overlap in that sample (a housing round the joint between them: the convex hull fills the recess the other
+# link turns in); every pair three or more joints apart stays (an upper arm into the chest is a real collision).
+SELF_EXCLUDE = {                           # (body regex, body regex, reason); {s}: one side (left, right)
+    "unitree_g1": [
+        ("torso_link", "{s}_shoulder_roll_link",
+         "shoulder housing (as the library's H1-2): the roll link's shell turns in the torso hull's shoulder recess, "
+         "40-48% of shoulder pitch x roll poses, up to 73 mm; the upper arm (yaw link) onwards stays enabled"),
+        ("{s}_elbow_link", "{s}_wrist_pitch_link",
+         "wrist housing: the hulls meet round the wrist roll joint in 9% of its poses, at most 1.7 mm"),
+        ("{s}_wrist_roll_link", "{s}_wrist_yaw_link",
+         "wrist housing: the hulls meet round the wrist pitch joint in 4-5% of its poses, at most 2.6 mm"),
+        ("pelvis", "{s}_hip_roll_link",
+         "hip housing: the hulls meet round the hip pitch joint in 5-10% of its poses, up to 25 mm"),
+    ],
+    "unitree_h1": [
+        ("{s}_knee_link", "{s}_ankle_roll_link",
+         "ankle housing: the shin's shell reaches down round the ankle pitch joint into the sole's hull (25.7 mm at "
+         "rest, every ankle pose)"),
+        ("pelvis", "{s}_hip_pitch_link",
+         "hip housing: the hulls meet round the hip yaw joint in 7-8% of its poses, up to 8 mm"),
+        ("{s}_hip_yaw_link", "{s}_hip_roll_link",
+         "hip housing: the hulls meet round the hip pitch joint in 29-48% of its poses, up to 42 mm"),
+        ("{s}_elbow_roll_link", "{s}_wrist_yaw_link",
+         "wrist housing: the hulls overlap round the wrist pitch joint (2.6-7.9 mm at rest, 95-100% of its poses)"),
+    ],
+}
+
+
+def _self_collision(root: ET.Element, robot: str, decl: dict, keep=()) -> dict:
+    """Replace the library's self-collision pairs by the full set (above). keep: pairs (geom1, geom2) a hand adds
+    itself (a finger hand's thumb x its fingers), left out here. Returns {"pairs": n, "excluded": [(b1, b2, why)]}."""
+    contact = root.find("contact")
+    if contact is None:
+        contact = ET.SubElement(root, "contact")
+    for p in list(contact.findall("pair")):          # the library's pairs (all inside this set)
+        if re.fullmatch(r"selfcol_\d+", p.get("name") or ""):
+            contact.remove(p)
+    defaults: dict[str, dict] = {}
+
+    def scan(el, name, inherited):
+        own = dict(inherited)
+        for g in el.findall("geom"):
+            own.update(g.attrib)
+        defaults[name] = own
+        for c in el.findall("default"):
+            scan(c, c.get("class"), own)
+
+    top = root.find("default")
+    if top is not None:
+        scan(top, "main", {})
+    parts = {k: re.compile(v) for k, v in decl["parts"].items()}
+    ignore = re.compile(decl["ignore_geoms"]) if decl.get("ignore_geoms") else None
+    rules = dict(decl.get("rules", {}))
+    ex = [(re.compile(e["bodies"][0]), re.compile(e["bodies"][1]), e["reason"]) for e in decl.get("exclude", [])]
+    ex += [(re.compile(a.format(s=s)), re.compile(b.format(s=s)), why)
+           for a, b, why in SELF_EXCLUDE.get(robot, []) for s in SIDES]
+    wb = root.find("worldbody")
+    pelvis = next(b for b in wb.findall("body") if b.get("name") == "pelvis")
+    info: dict = {}                                   # body name -> (part, hand, weld group, parent's weld group)
+    geoms: list = []                                  # (geom, body, part, hand, weld group)
+
+    def walk(b, cls, part, hand, weld, pweld):
+        name = b.get("name") or ""
+        cls = b.get("childclass") or cls
+        own = next((k for k, rx in parts.items() if rx.fullmatch(name)), None)
+        if own is not None:
+            part = own
+        # the hand: the wrist mount and all below it (pad, tool, real hand), the H1-2's Inspire fingers (L_*, R_*)
+        hand = hand or name.endswith("_mount") or name.startswith(("L_", "R_"))
+        if b.find("joint") is not None or b.find("freejoint") is not None:
+            pweld, weld = weld, name
+        info[name] = (part, hand, weld, pweld)
+        k = 0
+        for g in b.findall("geom"):
+            a = dict(defaults.get(g.get("class") or cls, {}))
+            a.update(g.attrib)
+            if int(a.get("contype", "1")) == 0 and int(a.get("conaffinity", "1")) == 0:
+                continue                              # a look
+            if g.get("name") is None:
+                g.set("name", f"{name}_sc{k}")
+                k += 1
+            if ignore is not None and ignore.fullmatch(g.get("name")):
+                continue                              # a sensing volume (the kick's strike boxes)
+            geoms.append((g.get("name"), name, part, hand, weld))
+        for c in b.findall("body"):
+            walk(c, cls, part, hand, weld, pweld)
+
+    walk(pelvis, pelvis.get("childclass") or "main", None, False, "world", None)
+    pw = {w: p for _, _, w, p in info.values()}
+    kind = lambda p: "arm" if p.endswith("arm") else "leg" if p.endswith("leg") else "body"   # noqa: E731
+    keep = {tuple(sorted(k)) for k in keep}
+    excluded, seen, out = [], set(), []
+    for i in range(len(geoms)):
+        g1, b1, p1, t1, w1 = geoms[i]
+        for j in range(i + 1, len(geoms)):
+            g2, b2, p2, t2, w2 = geoms[j]
+            if b1 == b2 or p1 is None or p2 is None or tuple(sorted((g1, g2))) in keep:
+                continue
+            k1, k2 = kind(p1), kind(p2)
+            if k1 == "arm" and k2 == "arm":
+                if p1 == p2 and t1 and t2:
+                    continue                          # one hand's parts: the hand's own pairs (realhand.py)
+                if p1 == p2 and t1 != t2 and HAND_CARRIER.fullmatch(b1 if t2 else b2):
+                    continue                          # a hand x the wrist links that carry it (its palm's hull)
+            elif k1 == "leg" and k2 == "leg":
+                if not rules.get("leg_leg" if p1 != p2 else "same_leg", False):
+                    continue
+            elif "arm" not in (k1, k2):              # a leg x the body (pelvis, waist, torso); not body x body
+                if "leg" not in (k1, k2):
+                    continue
+            if w1 == w2 or pw.get(w1) == w2 or pw.get(w2) == w1:
+                key = tuple(sorted((b1, b2)))
+                if key not in seen:
+                    seen.add(key)
+                    excluded.append((*key, "one rigid group, or two joined by one joint (the joint's housing)"))
+                continue
+            hit = next((why for ra, rb, why in ex if (ra.fullmatch(b1) and rb.fullmatch(b2))
+                        or (ra.fullmatch(b2) and rb.fullmatch(b1))), None)
+            if hit is not None:
+                key = tuple(sorted((b1, b2)))
+                if key not in seen:
+                    seen.add(key)
+                    excluded.append((*key, hit))
+                continue
+            out.append((g1, g2))
+    for i, (g1, g2) in enumerate(out):
+        ET.SubElement(contact, "pair", name=f"selfcol_{i}", geom1=g1, geom2=g2, **SELF_PAIR)
+    return {"pairs": len(out), "excluded": excluded}
+
+
 def _yaw(quat) -> float:
     w, x, y, z = quat
     return math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+
+
+# The motors' rotor inertia, friction and (the H1-2's hips, torso and knees) torque-speed curves from Unitree's own
+# actuator data (no battery cap: Unitree publishes no discharge limit).
+# Source for every number in UNITREE_ACTUATORS: unitree_rl_lab, source/unitree_rl_lab/unitree_rl_lab/assets/robots/
+# unitree_actuators.py, commit 4960b84732b0c2ec593dccbfe963fda1bcd7b1e3 (S6 of the G1's body.toml, S8 of the H1-2's):
+# per actuator class `armature` (rotor inertia x gear ratio^2, kg m^2), `Fs` (static friction, N m: MuJoCo
+# frictionloss), `Fd` (dynamic friction, N m s/rad: MuJoCo damping) and the curve X1 / X2 (rad/s) / Y1 / Y2 (N m).
+# Before: the models' own armature 0.01 on every joint and frictionloss 0.3 (G1) / 0.1 (H1-2), and for the H1-2 the
+# library's estimated curves (Y1 = Y2 = the URDF effort, X1 = 0.6 X2).
+# The G1: each joint's class is its body.toml [motors.assign] (unitree_rl_lab unitree.py UNITREE_G1_29DOF_CFG); the
+# ankles and the waist roll / pitch are two N5020-16 in a parallel linkage: twice the inertia and the friction.
+# The H1-2: Unitree publishes no H1-2 actuator table. Its hips, torso and knees are M107 motors (unitree_rl_lab
+# unitree.py UNITREE_H1_CFG: actuator groups "M107-24-1" = the knees, "M107-24-2" = the hips and the torso), and the
+# h1_2.urdf velocity limits (23 rad/s hips and torso, 14 rad/s knees) are 0.90 / 0.88 of the no-load speeds X2 of
+# M107_15 (25.6) and M107_24 (16.0), the ratio of the G1's URDF velocities to its motors' X2 (0.88-0.92): the hips
+# and the torso get M107_15, the knees M107_24 (its Y1 240 / Y2 292.5 N m are below the URDF effort 300 N m, which
+# stays the hard cap). The H1-2's ankles and arms (no published class) keep the library's estimate and the model's
+# armature and friction.
+UNITREE_ACTUATORS = {
+    "N7520_14p3": dict(armature=0.01017752004, Fs=1.6, Fd=0.16),
+    "N7520_22p5": dict(armature=0.025101925, Fs=2.4, Fd=0.24),
+    "N5020_16": dict(armature=0.003609725, Fs=0.6, Fd=0.06),
+    "N5020_16_x2": dict(armature=2 * 0.003609725, Fs=2 * 0.6, Fd=2 * 0.06),
+    "W4010_25": dict(armature=0.00425, Fs=0.6, Fd=0.06),
+    "M107_15": dict(armature=0.063259741, Fs=0.0, Fd=0.0, X1=14.0, X2=25.6, Y1=150.0, Y2=182.8),
+    "M107_24": dict(armature=0.160478022, Fs=0.0, Fd=0.0, X1=8.8, X2=16.0, Y1=240.0, Y2=292.5),
+}
+H1_2_ACTUATORS = {"hip_yaw": "M107_15", "hip_pitch": "M107_15", "hip_roll": "M107_15", "torso": "M107_15",
+                  "knee": "M107_24"}
+
+
+def unitree_actuators(m, robot) -> None:
+    """Unitree's armature, friction and curves (UNITREE_ACTUATORS) on the robot's joints and its output stage."""
+    a = robot.arb
+    keys = [a.bm.short(j) for j in a.JOINTS]
+    X1, X2, Y1, Y2 = (np.array(e, float) for e in a._env)
+    for i, k in enumerate(keys):
+        cls = a.D["motors"]["assign"][k] if robot.name == "unitree_g1" else H1_2_ACTUATORS.get(k)
+        if cls is None:
+            continue
+        c = UNITREE_ACTUATORS[cls]
+        v = a.vadr[i]
+        m.dof_armature[v] = c["armature"]
+        if c["Fs"] or c["Fd"]:
+            m.dof_frictionloss[v], m.dof_damping[v] = c["Fs"], c["Fd"]
+        if "X1" in c:
+            X1[i], X2[i] = c["X1"], c["X2"]
+            Y1[i], Y2[i] = min(c["Y1"], a.tau_max[i]), min(c["Y2"], a.tau_max[i])
+    if robot.name == "unitree_h1":
+        h2x_legs(m, robot, keys, X1, X2, Y1, Y2)
+        h2x_arms(m, robot, keys, X1, X2, Y1, Y2)
+    a._env = a.act.env = (X1, X2, Y1, Y2)
+
+
+# The H1-2 body with Unitree H2 / H2-X-class leg actuators, from the H2's official URDF (the H2-X is
+# shown with "high-torque joints"; Unitree publishes no H2 / H2-X motor data, so its legs are inferred from what is
+# published). Torque limits (the hard cap, as the URDF effort is for every Unitree robot): Unitree's H2.urdf
+# (unitreerobotics/unitree_ros robots/h2_description/H2.urdf, last commit 2026-07-08; unitree_mujoco h2_mujoco.xml has
+# the same actuatorfrcrange): hip yaw / pitch / roll 360 N m, knee 360 N m, ankle pitch 66.88 N m (its ankle roll, 19
+# N m, is weaker than the H1-2's 40: the H1-2's 40 N m stays); the H2 product page (unitree.com/H2): "max leg joint
+# torque 360 N m". Torque-speed curve: none is published, so each hip and knee motor takes the measured shape of the
+# M107 it replaces (UNITREE_ACTUATORS: M107_15 for the hips, M107_24 for the knee), scaled on both axes:
+#   torque: the curve's peak (its braking torque Y2) = the URDF effort 360 N m, Y1 = 360 / (Y2 / Y1 of the M107:
+#     182.8 / 150 = 1.2187 hips, 292.5 / 240 = 1.2188 knee) = 295.4 N m driving (Unitree's G1 has the same order:
+#     knee Y1 111 < Y2 131 < URDF 139);
+#   speed: the corner X1 so that the peak driving power Y1 x X1 is H2X_CORNER_W, the no-load X2 = X1 x (X2 / X1 of the
+#     M107: 25.6 / 14.0 = 1.829 hips, 16.0 / 8.8 = 1.818 knee); with that shape the power along the falling side never
+#     exceeds the corner's.
+# H2X_CORNER_W = 2.5 kW: the top of the sourced range of a real humanoid leg joint's peak power: Unitree's M107 curves
+# 2.10 / 2.11 kW at the corner (150 x 14.0, 240 x 8.8), BIT's BHR8-J1 knee measured 1.5 kW in a 0.5 m box jump (arXiv
+# 2506.12314, 2025); a flat 360 N m to the H2's URDF velocity of 20 rad/s would be 7.2 kW per joint. So: hips X1 8.46,
+# X2 15.5 rad/s; knee X1 8.46, X2 15.4 rad/s (the M107_24 had 8.8 / 16.0). The ankle pitch: 66.88 N m driving and
+# braking on the H1-2's own estimated speeds (body.toml [motors] ankle_pitch X1 6, X2 10 rad/s: 0.40 kW). Rotor inertia
+# and friction stay the M107's (UNITREE_ACTUATORS), the ankles' the model's. The H1-2's own URDF speed limits (hips 23,
+# knee 14, ankles 9 rad/s) still bound the joint targets.
+H2X_CORNER_W = 2500.0
+H2X_LEGS = {                                    # joint key: (URDF effort N m, the M107 class whose shape it takes)
+    "hip_yaw": (360.0, "M107_15"), "hip_pitch": (360.0, "M107_15"), "hip_roll": (360.0, "M107_15"),
+    "knee": (360.0, "M107_24"), "ankle_pitch": (66.88, None),
+}
+
+
+def h2x_legs(m, robot, keys, X1, X2, Y1, Y2) -> None:
+    """H2X_LEGS on the H1-2's legs: the torque limits everywhere the motor is clamped, and the curves (in place)."""
+    a = robot.arb
+    for i, k in enumerate(keys):
+        if k not in H2X_LEGS:
+            continue
+        eff, cls = H2X_LEGS[k]
+        if cls is None:
+            Y1[i] = Y2[i] = eff
+        else:
+            c = UNITREE_ACTUATORS[cls]
+            Y2[i] = eff
+            Y1[i] = eff / (c["Y2"] / c["Y1"])
+            X1[i] = H2X_CORNER_W / Y1[i]
+            X2[i] = X1[i] * (c["X2"] / c["X1"])
+        aid = int(a.aid[i])
+        jid = int(m.actuator_trnid[aid, 0])
+        m.actuator_ctrlrange[aid] = (-eff, eff)
+        if m.actuator_forcelimited[aid]:
+            m.actuator_forcerange[aid] = (-eff, eff)
+        if m.jnt_actfrclimited[jid]:
+            m.jnt_actfrcrange[jid] = (-eff, eff)
+        a.tau_max[i] = eff
+        a.act.tau_max[i] = eff
+        rig = robot.rig
+        if hasattr(rig, "laid") and hasattr(rig, "ltau"):
+            for n, la in enumerate(rig.laid):
+                if int(la) == aid:
+                    rig.ltau[n] = eff
+        if hasattr(rig, "aid") and hasattr(rig, "tau_lim"):
+            for n, la in enumerate(rig.aid):
+                if int(la) == aid:
+                    rig.tau_lim[n] = eff
+
+
+# The H1-2's arms with Unitree H2-class arm actuators (the whole H1-2 H2-class). Torque limits from
+# Unitree's H2.urdf (unitree_ros robots/h2_description/H2.urdf, 2026-07-08; unitree_mujoco h2_mujoco.xml the same):
+# shoulder pitch 130 N m; shoulder roll, shoulder yaw, elbow, wrist roll 60 N m; wrist pitch and yaw 10 N m; waist yaw
+# 120, roll / pitch 180 N m. Mapped onto the H1-2's joints (the same chain: shoulder pitch, roll, yaw, elbow, then the
+# forearm's roll, the wrist's pitch and yaw): shoulder_pitch 130; shoulder_roll, shoulder_yaw, elbow_pitch and
+# elbow_roll (the H2's wrist roll: the forearm's roll) 60. Never weaker than the H1-2: its wrist pitch / yaw (19 N m)
+# stay, and its single torso joint (a yaw: h1_2.urdf axis 0 0 1) keeps its own 200 N m on the M107-15 curve (the
+# H2's waist yaw is 120 N m).
+# Curves: Unitree publishes none for the H2's arm motors, so each takes the measured shape of the Unitree motor class
+# of its size (UNITREE_CURVES, unitree_rl_lab unitree_actuators.py, the G1's arm and hip motors): the shoulder pitch
+# (130 N m) the N7520-14.3 shape, the 60 N m joints the N5020-16 shape: the braking peak Y2 = the URDF effort, Y1 =
+# Y2 / (the class's Y2 / Y1), X2 = X1 x (the class's X2 / X1). X1 is the class's own corner power over the new Y1
+# (N7520-14.3: 71 x 22.63 = 1.61 kW; N5020-16: 24.8 x 30.86 = 0.77 kW: the measured range of Unitree's arm-size
+# motors), raised where needed so that no joint is weaker than the H1-2's at any speed (the forearm roll: 1.25 kW, the
+# shoulder yaw and elbow 0.80 kW; below the N7520's 1.61 kW). Rotor inertia and friction: the class's
+# (UNITREE_ACTUATORS). The H1-2's URDF speed limits (shoulder 9, upper arm 20, forearm 31.4 rad/s) still bound the
+# joint targets. A smaller class than the legs' (2.5 kW): an arm joint of a humanoid is a smaller motor.
+UNITREE_CURVES = {                              # unitree_rl_lab unitree_actuators.py (= the G1's body.toml [motors])
+    "N7520_14p3": dict(X1=22.63, X2=35.52, Y1=71.0, Y2=83.3),
+    "N5020_16": dict(X1=30.86, X2=40.13, Y1=24.8, Y2=31.9),
+}
+H2X_ARMS = {                                    # joint key: (URDF effort N m, the Unitree class whose shape it takes)
+    "shoulder_pitch": (130.0, "N7520_14p3"), "shoulder_roll": (60.0, "N5020_16"), "shoulder_yaw": (60.0, "N5020_16"),
+    "elbow_pitch": (60.0, "N5020_16"), "elbow_roll": (60.0, "N5020_16"),
+}
+
+
+def _curve(w, X1, X2, Y1):
+    """The driving torque limit of a curve at speeds w (elementwise)."""
+    return np.where(w < X1, Y1, np.clip(Y1 * (1.0 - (w - X1) / max(X2 - X1, 1e-9)), 0.0, None))
+
+
+def h2x_arms(m, robot, keys, X1, X2, Y1, Y2) -> None:
+    """H2X_ARMS on the H1-2's arms: the torque limits wherever the motor is clamped, the curves (in place), the class's
+    rotor inertia and friction. Each new curve is checked to be no weaker than the H1-2's at every speed."""
+    a = robot.arb
+    grid = np.linspace(0.0, 60.0, 6001)
+    for i, k in enumerate(keys):
+        if k not in H2X_ARMS:
+            continue
+        eff, cls = H2X_ARMS[k]
+        c, u = UNITREE_CURVES[cls], UNITREE_ACTUATORS[cls]
+        old = _curve(grid, X1[i], X2[i], Y1[i])
+        y2, y1 = eff, eff / (c["Y2"] / c["Y1"])
+        r = c["X2"] / c["X1"]
+        x1 = c["X1"] * c["Y1"] / y1                    # the class's corner power at the new torque
+        while np.any(_curve(grid, x1, x1 * r, y1) < old - 1e-9):
+            x1 *= 1.001                                # raised until no speed is weaker than the H1-2's
+        if y1 < Y1[i] or y2 < Y2[i] or eff < a.tau_max[i]:
+            raise ValueError(f"H2X_ARMS would weaken {k}")
+        X1[i], X2[i], Y1[i], Y2[i] = x1, x1 * r, y1, y2
+        v = a.vadr[i]
+        m.dof_armature[v] = u["armature"]
+        m.dof_frictionloss[v], m.dof_damping[v] = u["Fs"], u["Fd"]
+        aid = int(a.aid[i])
+        jid = int(m.actuator_trnid[aid, 0])
+        m.actuator_ctrlrange[aid] = (-eff, eff)
+        if m.actuator_forcelimited[aid]:
+            m.actuator_forcerange[aid] = (-eff, eff)
+        if m.jnt_actfrclimited[jid]:
+            m.jnt_actfrcrange[jid] = (-eff, eff)
+        a.tau_max[i] = eff
+        a.act.tau_max[i] = eff
+        rig = robot.rig
+        for ids, lim in (("aid", "tau_lim"), ("laid", "ltau")):
+            if hasattr(rig, ids) and hasattr(rig, lim):
+                for n, la in enumerate(getattr(rig, ids)):
+                    if int(la) == aid:
+                        getattr(rig, lim)[n] = eff
 
 
 class Robot:
@@ -130,6 +600,7 @@ class Robot:
         self.arb = Arbiter(self.rig)
         a = self.arb
         self.L = Layout(list(a.JOINTS), len(a.GROUPS["waist"]))
+        unitree_actuators(m, self)                 # Unitree's rotor inertia, friction, H1-2 curves
         self.has_run = bool(self.info["run"])
         self.modes = {STAND, WALK, JOINT} | ({RUN, RUN_ARMS} if self.has_run else set())
         # The G1's two optional walking policies (bodies/unitree_g1/falcon.py, agile.py: numpy ports of the released
@@ -191,7 +662,7 @@ class World:
         self.robot = Robot(m, self.robot_name)
         self.L = self.robot.L
         self.runp = RP.RunPolicy()
-        self.real_hands = dict(sc.real_hands)       # side -> "dex1": a gripper holding by friction, no weld (realhand.py)
+        self.real_hands = dict(sc.real_hands)       # side -> "dex1" / "dex3" / "inspire": a real hand, no weld (realhand.py)
         self.robot.real_hands = self.real_hands
         self.grippables = {n: dict(v, body=m.body(n).id) for n, v in sc.grippables.items()}
         self.welds = {(s, n): m.equality(f"grip_{s}_{n}").id for s in SIDES if s not in self.real_hands
@@ -206,7 +677,8 @@ class World:
         self._eq_data0 = m.eq_data.copy()           # a grip writes its weld's pose into the model: reset restores it
         self.tool_hands = set(sc.hand_tools)        # a hand that carries a tool has no fist to grip with
         self._renderers: dict = {}
-        self.hands = realhand.RealHands(self, self.real_hands) if self.real_hands else None
+        self.hands = (realhand.make_hands(self, self.real_hands, getattr(sc, "real_hand_options", {}))
+                      if self.real_hands else None)
         self.ref = Referee(self)
         self.reset()
 
@@ -233,62 +705,67 @@ class World:
             ET.SubElement(sens, "framequat", name=f"orientation_{where}", objtype="site", objname=s)
             ET.SubElement(sens, "gyro", name=f"gyro_{where}", site=s)
             ET.SubElement(sens, "accelerometer", name=f"accelerometer_{where}", site=s)
-        tools: list[tuple[str, str]] = []
         for side, kind in sc.real_hands.items():
             if side not in SIDES or kind not in realhand.KINDS or side in sc.hand_tools:
                 raise ValueError(f"real_hands[{side!r}] = {kind!r}: a side, one of {realhand.KINDS}, and no hand tool there")
-        grippers: list[str] = []
+            if realhand.HAND_ROBOT.get(kind, self.robot_name) != self.robot_name:
+                raise ValueError(f"real_hands[{side!r}] = {kind!r} is the {realhand.HAND_ROBOT[kind]}'s hand, not the "
+                                 f"{self.robot_name}'s")
+        hand_opts = dict(getattr(sc, "real_hand_options", {}) or {})
+        for side in hand_opts:
+            if sc.real_hands.get(side) not in realhand.FINGER_KINDS:
+                raise ValueError(f"real_hand_options[{side!r}]: only a finger hand (dex3, inspire) takes options")
+        self._inspire_palm: dict[str, str] = {}
+        hand_pairs: list[tuple[str, str]] = []
         if sc.real_hands:                           # friction that holds: elliptic cones, stiff friction (realhand.py)
             opt = root.find("option")
             opt.set("cone", opt.get("cone", "elliptic"))
             opt.set("impratio", opt.get("impratio", f"{realhand.IMPRATIO:g}"))
+            if set(sc.real_hands.values()) & set(realhand.FINGER_KINDS):
+                # the finger hands take the robot past 60 degrees of freedom, where MuJoCo's "auto" switches to its
+                # sparse Jacobians: on these trees (about 70 DoF) the dense ones step faster (the same equations)
+                opt.set("jacobian", opt.get("jacobian", "dense"))
         for side in SIDES:                          # the hands: a palm pad (or the task's tool) on each wrist mount
             mount = next(b for b in root.iter("body") if b.get("name") == f"{side}_mount")
             real = side in sc.real_hands
-            ET.SubElement(mount, "site", name=f"{side}_palm", pos=f"0 0 {realhand.CENTRE_Z:g}" if real else "0 0 0.045",
+            kind = sc.real_hands.get(side)
+            ET.SubElement(mount, "site", name=f"{side}_palm", pos=(realhand.grasp_point_in_mount(mount, side, kind)
+                          if kind in realhand.FINGER_KINDS else f"0 0 {realhand.CENTRE_Z:g}" if real else "0 0 0.045"),
                           size="0.008", group="4")
             frag = sc.hand_tools.get(side)
             if real:                                # the real hand (realhand.py): no pad, no weld
-                realhand.strip_hand(root, side, self.robot_name)
-                for g in realhand.build(root, mount, side, self.robot_name):
-                    tools.append((side, g))
-                    grippers.append(g)
+                if kind == "dex1":
+                    realhand.strip_hand(root, side, self.robot_name)
+                    realhand.build(root, mount, side, self.robot_name)
+                else:                               # a finger hand: the G1's fist goes; the H1-2's fingers get joints
+                    if kind == "dex3":
+                        realhand.strip_hand(root, side, self.robot_name)
+                    build = realhand.build_dex3 if kind == "dex3" else realhand.build_inspire
+                    _geoms, pairs = build(root, mount, side, self.robot_name, hand_opts.get(side, {}))
+                    hand_pairs += pairs
+                    if kind == "inspire":
+                        self._inspire_palm[side] = realhand.inspire_palm_geom(root, side)
                 continue
             if frag:
                 for i, el in enumerate(ET.fromstring(f"<x>{frag}</x>")):
                     if el.tag == "geom" and el.get("name") is None:
                         el.set("name", f"{side}_tool_g{i}")
                     mount.append(el)
-                    if el.tag == "geom" and el.get("contype", "1") != "0":
-                        tools.append((side, el.get("name")))
             else:
                 ET.SubElement(mount, "geom", name=f"{side}_palm_pad", type="box", pos="0 0 0.05", size="0.022 0.04 0.05",
                               contype="4", conaffinity="0", mass="0", group="3", rgba="0.15 0.15 0.17 1",
                               friction="1.2 0.005 0.0001")
             for name in sc.grippables:
                 sc.grip_weld(side, name)
-        # A tool is part of the robot (contype 4, conaffinity 0), so like the body hulls it would pass through the
-        # robot itself: explicit pairs make it collide with every hull but those of the arm that carries it (the
-        # robot library's self-collision does the same for the bare hands).
+        _shells(root, set(sc.ground), {b for s in SIDES if sc.real_hands.get(s) == "inspire"
+                                       for b in realhand.inspire_bodies(s)})
+        # The robot's self-collision (SELF_PAIR, above): every hull, shell, palm pad, tool and real hand of the robot
+        # against the parts it can reach; a finger hand's thumb x its fingers are the hand's own pairs (realhand.py).
+        self.selfcol = _self_collision(root, self.robot_name, load_body(self.robot_name).decl["self_collision"],
+                                       keep=hand_pairs)
         contact = root.find("contact")
-        hulls = [(b.get("name"), g.get("name")) for b in root.iter("body") for g in b.findall("geom")
-                 if g.get("name") and "_sc" in g.get("name")]
-        for side, tool in tools:
-            own = (f"{side}_shoulder", f"{side}_elbow", f"{side}_wrist")
-            for body, hull in hulls:
-                if not body.startswith(own):
-                    ET.SubElement(contact, "pair", name=f"toolcol_{tool}_{hull}", geom1=tool, geom2=hull, condim="3")
-        for g1 in grippers:                         # a gripper touches the other hand: its gripper, pad or tool
-            side = g1.split("_", 1)[0]
-            other = "right" if side == "left" else "left"
-            if other in sc.real_hands:
-                hand = [g for g in grippers if g.startswith(other + "_")] if side == "left" else []
-            elif other in sc.hand_tools:
-                hand = [t for s_, t in tools if s_ == other]
-            else:
-                hand = [f"{other}_palm_pad"]
-            for g2 in hand:
-                ET.SubElement(contact, "pair", name=f"handcol_{g1}_{g2}", geom1=g1, geom2=g2, condim="3")
+        for g1, g2 in hand_pairs:                   # a finger hand's thumb and its fingers (realhand.py's own)
+            ET.SubElement(contact, "pair", name=f"handcol_{g1}_{g2}", geom1=g1, geom2=g2, condim="3")
         return ET.tostring(root, encoding="unicode")
 
     # ------------------------------------------------------------------ episode
@@ -565,8 +1042,13 @@ class World:
 
     def jaw_frame(self, side: str) -> tuple[np.ndarray, np.ndarray]:
         """(position, rotation) of a real hand's jaw centre: columns x closing axis (towards jaw a, the palm side), y
-        across the jaws, z along the fingers."""
+        across the jaws, z along the fingers. A finger hand: its grasp frame (grasp_frame)."""
         return self.hands.jaw_frame(side)
+
+    def grasp_frame(self, side: str) -> tuple[np.ndarray, np.ndarray]:
+        """(position, rotation) of a finger hand's grasp site (realhand.FingerHands.grasp_frame): where a handle's axis
+        sits in the closed hand; columns x out of the palm, y = z x x, z along the fingers."""
+        return self.hands.grasp_frame(side)
 
     def grip_cmd(self, side: str) -> float:
         """The grip value in force on a side: a real hand's closure command, else 1.0 / 0.0 for the weld grip."""
@@ -754,6 +1236,9 @@ class Actions:
         self.real = dict(getattr(r, "real_hands", {}) or {})     # the sides with a real hand (realhand.py)
         if self.real:
             note = "; ".join(f"grip_{s}: the {s} gripper's closure command, 0 (open, 90 mm) to 1 (closed)"
+                             if self.real[s] == "dex1" else
+                             f"grip_{s}: the {s} hand's closure command, 0 (open, the fingers straight) to 1 (every "
+                             "drive closing towards its closed position; fingers stop on what they touch)"
                              for s in SIDES if s in self.real)
             for t in self.types.values():
                 t["meaning"] += f" ({note})"

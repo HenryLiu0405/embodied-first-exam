@@ -1,7 +1,10 @@
-"""Basketball layup (FIBA): with the ball in the hand take at most two steps towards the basket, jump, let go of the
-ball in the air close to the ring, and it enters the basket from above. Official court, backboard, ring and size-7
-ball; the Unitree H1-2."""
+"""Basketball layup (FIBA): the ball starts held in the H1-2's own two Inspire hands (rfo.realhand: five fingers each;
+contact and friction only, nothing welded), resting on the upturned right hand with the left hand on its side; with it
+take at most two steps towards the basket, jump, let go of it in the air close to the ring, and it enters the basket
+from above. Official court, backboard, ring and size-7 ball; the Unitree H1-2. The court, travelling and two-hand hold
+blocks are copied byte-identically from basketball-dribble."""
 import math
+import xml.etree.ElementTree as ET
 
 import mujoco
 import numpy as np
@@ -19,7 +22,7 @@ FALL_Z = 0.35
 # backboard's face 1.20 m, so the centre is 0.375 m in front of the face and the ring's inner edge 0.150 m (the
 # equipment appendix: 151 mm +- 2). Ring metal 16-20 mm: 18 mm. The ring's rebound: the equipment appendix asks for an
 # energy absorption of 35 to 50 % of the impact energy: 42.5 % here, a restitution of sqrt(1 - 0.425) = 0.76 (measured
-# on this ring with this ball: 0.76, with the contact's nominal value 0.81; tests/test_free_throw.py).
+# on this ring with this ball: 0.76, with the contact's nominal value 0.81).
 COURT = dict(length=28.0, width=15.0, line=0.05, ring_x=1.575, board_x=1.20, ft_line=5.80, key_half=2.45,
              ft_radius=1.80, three_radius=6.75, three_side=0.90, no_charge=1.25, net_length=0.42)
 RING_RESTITUTION, RING_NOMINAL = math.sqrt(1.0 - 0.425), 0.81
@@ -102,14 +105,6 @@ def build_court(sc, hx: float, hy: float, p: dict, flip: bool = False) -> dict:
     return dict(x=hx, y=hy, z=p["ring_height_m"], inner_radius=p["ring_inner_diameter_m"] / 2, end_line_x=X(de),
                 free_throw_line_x=X(df), board_face_x=X(bx))
 
-
-def ball_in_hand(w, side: str = "right") -> None:
-    """The ball against the end of the fist, gripped."""
-    m, d = w.m, w.d
-    mujoco.mj_kinematics(m, d)
-    b = w.robot.mount[side]
-    w.put("ball", d.xpos[b] + d.xmat[b].reshape(3, 3) @ np.array([0.0, 0.0, 0.105 + BALL["radius"]]))
-    w.grab(side, "ball", event=False)
 # ---- end of the court block ----
 
 
@@ -223,27 +218,81 @@ class Travel:
 # ---- end of the travelling block ----
 
 
+# ---- the two-hand hold at the start (the H1-2's Inspire hands) ----
+# The ball is held as a player carries it before a play: resting on the upturned right hand, the fingers spread
+# forwards under it and curled a little round it (closure HOLD_CLOSURE), the left hand on its left side, the palm on
+# it. HOLD (each arm's joints, numeric inverse kinematics of both arms) puts the right palm under the ball and the left
+# palm on its side, each 2 mm into the ball's surface (the palm's face is PALM_FACE from the hand's grasp centre on a
+# ball this size); the start command keeps those arm targets and closures; nothing presses the ball but its weight and
+# the hands' own drives.
+HOLD = {"right": np.array([-0.4674, 0.2556, -0.335, 1.5041, 1.3391, -0.2658, 1.0833]),
+        "left": np.array([-0.2102, 0.0481, -0.724, 0.4173, 0.0342, -0.47, 0.7949])}
+HOLD_CLOSURE = {"right": 0.3, "left": 0.0}
+PALM_FACE, PALM_PRESS = 0.0265, 0.002
+# HOLD has the right upper arm 1.8 mm inside the torso's hull (the robot's self-collision, world.py): the right arm
+# starts START_ROLL (shoulder roll) off the chest, its target stays HOLD, so the servo lays it against the chest (at
+# most 0.02 mm deep; the ball as before).
+START_ROLL = -0.02
+
+
+def ball_in_hands(w) -> None:
+    """t = 0: both arms in the hold, the ball on the upturned right palm (its centre PALM_FACE - PALM_PRESS less than a
+    ball radius out of the palm, along the palm's normal), the closures set; the start command keeps them."""
+    r, d = w.robot, w.d
+    a = w.L.ARMS.start
+    for i, side in enumerate(("left", "right")):
+        d.qpos[r.qadr[a + 7 * i:a + 7 * i + 7]] = HOLD[side]
+        r.arb.q_a[a + 7 * i:a + 7 * i + 7] = r.arb.q_b[a + 7 * i:a + 7 * i + 7] = HOLD[side]
+        w.hands.cmd[side] = HOLD_CLOSURE[side]
+    d.qpos[r.qadr[a + 8]] += START_ROLL                 # the right shoulder roll off the chest (START_ROLL)
+    mujoco.mj_kinematics(w.m, d)
+    c, R = w.grasp_frame("right")
+    w.put("ball", c + R[:, 0] * (BALL["radius"] - PALM_FACE + PALM_PRESS))
+
+
+# The palm-ball contact (an explicit pair with the H1-2 model's own collision hull of the Inspire hand base, the palm:
+# PALM_GEOM). With the ball's own contact (its rule-book rebound, 0.85, a lightly damped spring) a ball on a palm
+# rattles off it. The palm is the soft part of a hand and absorbs the ball: a critically damped contact (palm rebound
+# 0.12, measured head-on at 3 m/s), with the elliptic friction cones and impratio 100 of every world with real hands
+# (rfo.realhand). The fingers' and the thumb's rubber pads keep their own contact (rfo.realhand: friction 1.0, stiff,
+# critically damped); the floor, the ring and the backboard keep the ball's own (rebound 0.85).
+PALM_SOLREF, PALM_SOLIMP, PALM_MU, PALM_REBOUND = "0.005 1", "0.99 0.999 0.001", 0.7, 0.12
+PALM_GEOM = "{side}_wrist_yaw_link_sc0"        # the hand base's hull in the H1-2 model (realhand.inspire_palm_geom)
+# ---- end of the hold ----
+
+
 class Task(TaskBase):
     name = "layup"
     title = "Basketball: layup"
     category = "basketball-and-rackets"
     robot = "unitree_h1"
     rulebook = ("FIBA Official Basketball Rules 2024: Art. 2 (court, no-charge semi-circle), Art. 3 and the Basketball "
-                "Equipment appendix (backboard, ring, size-7 ball), Art. 16 (goal), Art. 25 (travelling)")
+                "Equipment appendix (backboard, ring, size-7 ball), Art. 13 (how the ball is played), Art. 14 (control: "
+                "a player holds a live ball), Art. 16 (goal), Art. 25 (travelling)")
     deviations = [
-        "Art. 3 (equipment): the hand holds the ball by a grip switched on and off, not by fingers; the ball is "
-        "released when the grip is switched off.",
+        "the player's hands: the H1-2's own Inspire five-finger hands (six drives each: four fingers, the thumb's "
+        "flexion and rotation; fingertip forces 20 N, the thumb 30 N), each closed by one command; the ball is held "
+        "in the two hands by contact and friction alone (nothing is welded) and can slip or drop; it is let go when no "
+        "hand has been on it for {touch_gap_s} s.",
+        "Art. 3 (equipment, the hand): the palm is modelled as the soft part of a hand: it absorbs the ball (a ball "
+        "thrown at a still palm keeps "
+        f"{PALM_REBOUND:.2f} of its speed) instead of bouncing it like the floor ({BALL['bounce']:.2f}); with the "
+        "ball's own rebound a ball on a palm rattles off it. The fingers' rubber pads absorb it too (critically "
+        "damped); the floor, the ring and the backboard keep the ball's rule-book rebound.",
+        "Art. 13: while the ball is in your hands it may touch no part of you but the hands (no ball held against the "
+        "chest or between the forearms); intent cannot be judged.",
         "Basketball Equipment (basket): the ring is rigid (no pressure release) and the net is only drawn: it does not "
         "slow the ball. A goal is judged at the ring: the ball's centre down through the ring's plane and on to one "
         "ball diameter below it.",
-        "Art. 25.2.1: you start standing with the ball in the hand and are judged as a player who has just ended a "
+        "Art. 25.2.1: you start standing with the ball in the hands and are judged as a player who has just ended a "
         "dribble while moving: two steps are allowed (a standing player would have a pivot foot instead), since no "
         "dribble precedes the layup here. After the two steps no foot may touch the floor again while the ball is "
         "held: pivoting after a stop is not offered.",
         "The layup itself is not defined by the rule book: here it is a shot let go in the air (after a real "
         "take-off) with the ball inside the no-charge semi-circle's radius of the ring ({layup_radius_m} m, "
         "Art. 2.4.7); a shot from further out or from the floor is not a layup.",
-        "One attempt, no opponent, no rebound: touching the ball after the release ends the attempt.",
+        "One attempt, no opponent, no rebound, no dribble: the ball leaving the hands is the shot, and touching it "
+        "after that ends the attempt.",
     ]
     time_limit_s = 15.0
     start = (0.0, 0.0, 0.0)
@@ -251,67 +300,93 @@ class Task(TaskBase):
     fall_z = FALL_Z
     params = dict(ring_height_m=3.05, ring_inner_diameter_m=0.45, ring_metal_m=0.018, ring_centre_to_board_m=0.375,
                   board_width_m=1.80, board_height_m=1.05, board_bottom_m=2.90, start_to_ring_m=3.0,
-                  layup_radius_m=1.25, max_steps=2, step_gap_s=0.03, foot_slide_m=0.20, air_min_s=0.05, takeoff_speed_m_s=0.5,
-                  retouch_grace_s=0.05)
+                  layup_radius_m=1.25, max_steps=2, step_gap_s=0.03, foot_slide_m=0.20, air_min_s=0.05,
+                  takeoff_speed_m_s=0.5, retouch_grace_s=0.05, touch_gap_s=0.03)
 
-    sentence = ("Make a layup: with the basketball in your right hand take at most two steps towards the basket, "
-                "jump, and let go of the ball in the air close to the ring so that it enters the basket from above.")
+    sentence = ("Make a layup: with the basketball held in your two hands take at most two steps towards the "
+                "basket, jump, and let go of the ball in the air close to the ring so that it enters the basket from "
+                "above.")
     rules = ("The official basket: a rigid ring of {ring_inner_diameter_m} m inner diameter ({ring_metal_m} m metal), "
              "its top edge {ring_height_m} m above the floor, its centre {ring_centre_to_board_m} m in front of a "
              "backboard {board_width_m} m wide and {board_height_m} m high whose lower edge is {board_bottom_m} m "
              "above the floor. The ball is a size-7 basketball (" + f"{2 * BALL['radius']:.3f} m across, "
              f"{BALL['mass']:.2f} kg, it keeps {BALL['bounce']:.2f} of its speed in a bounce on the floor" + "); it "
-             "flies in air (drag and spin lift). It starts gripped in your right hand. Travelling: while the ball is "
-             "in your hand you may take at most {max_steps} steps. A step is a foot touching the floor after it has "
-             "been off it for at least {step_gap_s} s; both feet landing within {step_gap_s} s of each other are one "
-             "step; the same foot may not touch down twice in a row, and a foot on the floor may not slide more than "
-             "{foot_slide_m} m from where it stood or was put down (a shuffle is travelling). After that no foot may touch the floor again "
-             "until you have let go of the ball. The release: at the moment you let go you must be in the air: "
-             "nothing of you has touched anything but the ball for at least {air_min_s} s, after a take-off at which "
-             "your pelvis was moving upwards at {takeoff_speed_m_s} m/s or more; and the ball's centre must be "
-             "within {layup_radius_m} m (horizontally) "
-             "of the ring's centre, the radius of the no-charge semi-circle painted under the basket. You succeed "
-             "when, after that release, the ball's centre goes down through the ring's plane inside the ring and on "
-             "down to one ball diameter below it (off the backboard or not). You fail if you travel; if you let go "
-             "of the ball with something of you on the floor, without a take-off, or further from the ring; if any "
-             "part of you touches the ball more than {retouch_grace_s} s after you let go of it (it cannot be gripped "
-             "again); if the ball touches the floor before it is through the ring; if the ball's centre comes up "
-             "through the ring from below; if you fall before the ball is through (a fall: your pelvis lower than "
+             "flies in air (drag and spin lift). Your hands are five-finger hands, each closed by its grip value (0 "
+             "open, 1 closed); they hold the ball only by contact and friction: it starts resting on your upturned "
+             "right hand, the fingers curled a little round it, your left hand on its side, and it can slip or drop. "
+             "A hand is the palm, the fingers, the thumb and the wrist; a hand is on the ball while it touches the "
+             "ball, gaps shorter than "
+             "{touch_gap_s} s included; the ball is in your hands while at least one hand is on it, and you let go of "
+             "it at the last touch of a hand after which no hand has been on it for {touch_gap_s} s. While the ball is "
+             "in your hands it may touch no part of you but your hands, and it may not touch the floor. Travelling: "
+             "while the ball is in your hands you may take at most {max_steps} steps. A step is a foot touching the "
+             "floor after it has been off it for at least {step_gap_s} s; both feet landing within {step_gap_s} s of "
+             "each other are one step; the same foot may not touch down twice in a row, and a foot on the floor may "
+             "not slide more than {foot_slide_m} m from where it stood or was put down (a shuffle is travelling). "
+             "After that no foot may touch the floor again until you have let go of the ball. The release: at the "
+             "moment you let go you must be in the air: nothing of you has touched anything but the ball for at least "
+             "{air_min_s} s, after a take-off at which your pelvis was moving upwards at {takeoff_speed_m_s} m/s or "
+             "more; and the ball's centre must be within {layup_radius_m} m (horizontally) of the ring's centre, the "
+             "radius of the no-charge semi-circle painted under the basket. You succeed when, after that release, the "
+             "ball's centre goes down through the ring's plane inside the ring and on down to one ball diameter below "
+             "it (off the backboard or not). You fail if you travel; if the ball touches the floor or a part of you "
+             "other than a hand while it is in your hands; if you let go of the ball (on purpose or because it "
+             "slipped) with something of you on the floor, without a take-off, or further from the ring; if any part "
+             "of you touches the ball more than {retouch_grace_s} s after you let go of it (no catching it again); if "
+             "the ball touches the floor before it is through the ring; if the ball's centre comes up through the "
+             "ring from below; if you fall before the ball is through (a fall: your pelvis lower than "
              f"{FALL_Z} m above the floor, or any part of you other than your feet on the floor)" + "; or after "
              "{time_limit_s} s.")
     venue = ("A FIBA court. You stand in the restricted area facing the basket (+x); the point under the ring's "
              "centre is {start_to_ring_m} m ahead of your pelvis, the backboard's face {ring_centre_to_board_m} m "
              "beyond it. Painted on the floor: the restricted area, the free-throw line and circle behind you, and "
              "the no-charge semi-circle ({layup_radius_m} m round the point under the ring, open towards the end "
-             "line). The ball is against the end of your right fist. A ball is released when the hand's grip is "
-             "switched off.")
-    difficulty = ("Two steps and a jump have to carry a 67 kg body almost two metres with a ball in one hand, and "
-                  "the release comes in the air, about a metre below a ring that is 0.21 m wider than the ball. The "
-                  "robot has a walking gait and nothing that jumps or lands."
-                  " The built-in walking gait steps on the spot even at a zero command, so while the ball is in your hand its steps are counted like any others.")
+             "line). The ball rests on your upturned right hand in front of your chest, its centre about 1.1 m above "
+             "the floor, 0.39 m ahead of your pelvis and 0.06 m to its right; the right hand's fingers point forwards "
+             "under it, curled a little round it (grip value 0.3), the left hand's palm is on its left side, open "
+             "(grip value 0); the start command keeps that hold. A grip value is that hand's closure command: 0 opens "
+             "the fingers, 1 closes every finger and the thumb until they meet something.")
+    difficulty = ("Two steps and a jump have to carry a 67 kg body almost two metres while the hands keep the ball "
+                  "through every footfall, and the release comes in the air, about a metre below a ring that is "
+                  "0.21 m wider than the ball: the hands have to let it go with the speed of the arms' own push, "
+                  "since a hand does not bounce it. The robot has a walking gait and nothing that "
+                  "jumps or lands; the built-in walking gait steps on the spot even at a zero command, so while the "
+                  "ball is in your hands its steps are counted like any others.")
 
     def build(self, sc):
         p = self.p
         hx = p["start_to_ring_m"]
         self.hoop = build_court(sc, hx, 0.0, p)
-        sc.ball("ball", "basketball", (0.6, -0.17, 1.13), grippable=True)
+        sc.ball("ball", "basketball", (0.42, 0.0, 1.28))         # nothing is grippable: the hands hold it
+        sc.real_hands["left"] = sc.real_hands["right"] = "inspire"   # the H1-2's own hands (rfo.realhand)
+        for side in ("left", "right"):
+            ET.SubElement(sc.root.find("contact"), "pair", name=f"palm_ball_{side}", geom1="ball",
+                          geom2=PALM_GEOM.format(side=side), condim="6",
+                          friction=f"{PALM_MU} {PALM_MU} 0.003 {BALL['roll']} {BALL['roll']}", solref=PALM_SOLREF,
+                          solimp=PALM_SOLIMP)
         sc.camera("venue", (hx - 3.4, -4.6, 2.6), (hx - 0.8, 0.0, 1.7), fovy=55)
 
     def reset(self, w):
-        ball_in_hand(w)
+        ball_in_hands(w)
 
     def referee_reset(self, w, ref):
         p, h = self.p, self.hoop
         self.ball = ref.geoms(body="ball")
+        self.hand = {s: ref.part(f"{s}_hand") for s in ("left", "right")}
         self.robot = ref.part("robot")
+        self.body = self.robot & ~ref.part("hands")
         travel = Travel(w, ref, p["step_gap_s"], int(p["max_steps"]), p["foot_slide_m"])
         travel.start("steps")
         self.trackers = {"hoop": HoopPass((h["x"], h["y"], h["z"]), h["inner_radius"], BALL["radius"]),
-                         "up": Crossing((0, 0, 1), h["z"], direction=1), "flights": Flights(ref, min_air=p["air_min_s"]),
-                         "travel": travel, "takeoff_vz": None, "released": None}
+                         "up": Crossing((0, 0, 1), h["z"], direction=1),
+                         "flights": Flights(ref, min_air=p["air_min_s"], also_allowed=self.ball),
+                         "travel": travel, "takeoff_vz": None, "touch": {"left": 0.0, "right": 0.0}, "last": None,
+                         "released": None}
 
-    def may_grip(self, w, side, name):
-        return self.trackers.get("released") is None      # one shot: the ball cannot be gripped again
+    def on_ball(self, ref) -> dict:
+        """Which hands are on the ball now (touching it, gaps shorter than touch_gap_s included)."""
+        t = self.trackers["touch"]
+        return {s: t[s] is not None and ref.time - t[s] <= self.p["touch_gap_s"] + 1e-9 for s in ("left", "right")}
 
     def _off_axis(self, b) -> float:
         return math.hypot(b[0] - self.hoop["x"], b[1] - self.hoop["y"])
@@ -331,26 +406,47 @@ class Task(TaskBase):
         if x is not None and not was_in and self._off_axis(x) < h["inner_radius"]:
             return ref.fail("the ball came up through the ring from below")
         if tr["released"] is None:
+            now = [s for s in ("left", "right") if ref.touching(self.hand[s], self.ball)]
+            for s in now:
+                tr["touch"][s] = round(ref.time, 4)
+            if now:                                   # the state at the latest touch: the release, if it is the last
+                air = fl.air and fl.cur is not None
+                tr["last"] = {"t": round(ref.time, 4), "ball": [round(float(v), 4) for v in b],
+                              "air_s": round(ref.time - fl.cur["t0"], 4) if air else None,
+                              "takeoff_vz": tr["takeoff_vz"] if air else None}
             if bad:
                 return ref.fail(bad, steps=tr["travel"].steps)
-            d = self._off_axis(b)
-            if w.holder("ball"):
-                if d <= p["layup_radius_m"]:
+            if ref.touching(self.ball, self.body):
+                return ref.fail("the ball touched a part of you other than a hand while in your hands",
+                                parts=sorted(ref.parts_touching(self.ball) - {"left_hand", "right_hand"}))
+            if ref.touching(self.ball, ref.ground):
+                return ref.fail("the ball touched the floor while in your hands")
+            if any(self.on_ball(ref).values()):
+                if self._off_axis(b) <= p["layup_radius_m"]:
                     ref.stage("approach")
                 return
-            tr["released"] = ref.time
+            last = tr["last"]
+            if last is None:                          # (no hand has touched it since the start: it left them now)
+                air = fl.air and fl.cur is not None
+                last = {"t": round(ref.time, 4), "ball": [round(float(v), 4) for v in b],
+                        "air_s": round(ref.time - fl.cur["t0"], 4) if air else None,
+                        "takeoff_vz": tr["takeoff_vz"] if air else None}
+            tr["released"] = last["t"]
             bad = tr["travel"].stop()
             if bad:
                 return ref.fail(bad)
-            if not (fl.air and fl.cur is not None and ref.time - fl.cur["t0"] >= p["air_min_s"]):
-                return ref.fail("the ball was let go with the robot not in the air")
-            if tr["takeoff_vz"] is None or tr["takeoff_vz"] < p["takeoff_speed_m_s"]:
-                return ref.fail("the ball was let go in the air without a take-off", takeoff_vz=tr["takeoff_vz"])
+            d = self._off_axis(last["ball"])
+            if last["air_s"] is None or last["air_s"] < p["air_min_s"]:
+                return ref.fail("the ball was let go with the robot not in the air", air_s=last["air_s"])
+            if last["takeoff_vz"] is None or last["takeoff_vz"] < p["takeoff_speed_m_s"]:
+                return ref.fail("the ball was let go in the air without a take-off", takeoff_vz=last["takeoff_vz"])
             if d > p["layup_radius_m"]:
                 return ref.fail("the ball was let go too far from the ring", ball_to_ring_m=round(d, 3))
             ref.stage("approach")
-            ref.stage("release in the air", ball_height_m=round(float(b[2]), 3), ball_to_ring_m=round(d, 3),
-                      air_s=round(ref.time - fl.cur["t0"], 3), takeoff_speed_m_s=tr["takeoff_vz"])
+            ref.stage("release in the air", ball_height_m=round(float(last["ball"][2]), 3),
+                      ball_to_ring_m=round(d, 3), air_s=last["air_s"], takeoff_speed_m_s=last["takeoff_vz"])
+            if ev == "through" and ref.stage("through the ring"):
+                ref.succeed()
             return
         if ref.time - tr["released"] > p["retouch_grace_s"] and ref.touching(self.ball, self.robot):
             ref.fail("the ball was touched again after the release", parts=sorted(ref.parts_touching(self.ball)))
@@ -368,5 +464,5 @@ class Task(TaskBase):
     def privileged(self, w):
         tr = self.trackers
         return {"ball": w.pos("ball").tolist(), "ball_velocity": w.vel("ball").tolist(), "hoop": self.hoop,
-                "steps": len(tr["travel"].steps), "airborne": bool(tr["flights"].air),
-                "released": tr["released"] is not None}
+                "hands_on_ball": self.on_ball(w.ref), "steps": len(tr["travel"].steps),
+                "airborne": bool(tr["flights"].air), "released": tr["released"] is not None}

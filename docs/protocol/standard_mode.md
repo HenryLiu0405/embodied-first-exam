@@ -141,15 +141,24 @@ on which the frozen instance does not rebuild to its stored initial state report
 the agent's processes; from then on the service refuses every request, and it judges the episode it ran (the task's success rule, with any settle or hold window run on the live simulator)
 and writes the verdict into `final.json` (`success`, the verdict; `live_success`, how the episode itself ended, before
 any settle or hold check; `graded_by` = `live`, `replays` = 0); nothing is
-replayed to grade it (PROTOCOL H.4). The video is recorded during the episode or rendered from `trajectory.npz` after
-the verdict (`video_source`), and never decides anything. A separate verifier transcribes `final.json` into
-`reward.json` (`graded_by_live` = 1). `infra_error = 1` means there is no verdict on the agent: `final.json` is
+replayed to grade it (PROTOCOL H.4). The video is a post-hoc replay of `trajectory.npz` after the verdict by default, and a live
+recording where the simulator is not verified bit-wise replayable (`video_source`, PROTOCOL §4); it never decides
+anything. With resets, the shared 2.1 sidecar service (`rcb_service.py`, one file copied unchanged into each benchmark
+that runs it, also under the 2.3 realtime layer) keeps the first episode as evidence too: `trajectory.first.npz` (its
+rows from the journal) and `replay.first.mp4`, rendered after the graded video; `final.json` says how it ended
+(`first_success`, `first_reason`; a success ends the trial, so after a reset `first_success` is 0) and decides nothing
+with it. A separate verifier transcribes `final.json` into `reward.json` (`graded_by_live` = 1); the shared grader
+(`embodied_first_exam/standard/v2_1/grade.py`) also writes `first_success`, the first-attempt, no-reset result reported
+beside the graded one, and copies the first episode's files. A service of a benchmark's own keeps no first episode and
+reports `resets` only; `first_success` is then `success` when no reset was made, else 0 (running.md "Results").
+`infra_error = 1` means there is no verdict on the agent: `final.json` is
 missing, unreadable or not finalized, or the service reported `sim_crashed`, `resume_failed`, `instance_mismatch` or
 (2.4) `call_watchdog`.
 
-### Live recording (optional, sidecar only; the agent sees none of it)
-`live.mp4`, `live_timeline.jsonl`, `live_segments.jsonl`, `trajectory_live.f64`, `startups.jsonl`: rendered from the
-recorded trajectory by default, frames stamped with the call, never affecting the verdict. The reference recording is RoboTwin's
+### Live recording (sidecar only; the agent sees none of it)
+`live.mp4`, `live_timeline.jsonl`, `live_segments.jsonl`, `trajectory_live.f64`, `startups.jsonl`: captured during the
+episode, or rendered from the recorded trajectory where a post-hoc replay is allowed (PROTOCOL §4), frames stamped with
+the call, never affecting the verdict. The reference recording is RoboTwin's
 (tasks/robotwin-2/README.md).
 
 ### Proprioception (2.1)
@@ -344,7 +353,7 @@ when the scene is built, the service waits for it (the agent's own time) instead
 ### 12. Per-call bounds (2.2)
 No step cap, and the wall clock stays the episode's only budget. Two bounds keep one call from holding the
 single-threaded service:
-- **`max_call_wall_s`** (`/spec`, default 900 s, below the client's 1800 s read timeout; task env `RCB_MAX_CALL_WALL_S`): a
+- **`max_call_wall_s`** (`/spec`, default 900 s, below the client's read timeout, which is at least `max_call_wall_s` + 120 s and at least 1800 s; task env `RCB_MAX_CALL_WALL_S`): a
   `/submit` or `/observe` that runs longer stops at the next control step and returns normally, with `meta.stopped =
   "max_call_wall_s"` and `executed_rows` below the rows sent.
 - **Client hang-up**: when the client closes the connection (its read timeout, a killed process), the call stops at the
@@ -445,8 +454,8 @@ negative `Content-Length` (CI job `unit-tests`).
 `episode.jsonl` (calls, checkpoints, resumes), `journal.f64`, `startups.jsonl`, `calls/NNNNNN/` (meta + last frames per call),
 `server.log`, and at the end `trajectory.npz`, `final.json`, `replay.mp4`. The collect hook signals the service by PID
 after a collect hook has stopped the agent's processes; the service judges the live episode in-process (or dumps it with its live verdict
-and exits), and the hook writes `final.json`, then the video (recorded live or rendered from the trajectory: the
-benchmark's doc). A separate, network-less verifier transcribes `final.json` (PROTOCOL H.4). A GPU lost to a host
+and exits), and the hook writes `final.json`, then the video (a post-hoc replay, or a live recording where PROTOCOL §4
+requires one). A separate, network-less verifier transcribes `final.json` (PROTOCOL H.4). A GPU lost to a host
 systemd reload before the episode was judged is reported as `gpu_lost` (`infra_error`).
 
 ### 15. Privileged-mode parity
@@ -594,7 +603,7 @@ is the only GET this capability adds.
 | Item | Level |
 |---|---|
 | A call's budget is `min(max_call_wall_s, request_deadline_unix_s − now)`. The service checks it, and a client disconnect, at control-step boundaries | MUST |
-| A native step cannot be pre-empted safely, so the service also owns a hard watchdog. A call that has not finished 60 s past its budget ends the process. The restart then ends the episode as an infra error, `call_watchdog` (`infra_error = 1`), and does not replay into the call that hung | MUST |
+| A native step cannot be pre-empted safely, so the service also owns a hard watchdog. A call that has not finished 60 s past `max_call_wall_s` ends the process; the watchdog counts from the service's own cap, never from the request deadline, so a short deadline cannot get a slow step killed. The restart then ends the episode as an infra error, `call_watchdog` (`infra_error = 1`), and does not replay into the call that hung | MUST |
 | The restart ends the episode as `call_watchdog` only on evidence that the watchdog fired: the watchdog prints into its own file (`call-watchdog.trace`, emptied at every call), and its banner there is that evidence. `call-watchdog.json` alone, or its deadline having passed by the time the container is back, is not: any other crash during a call (a segfault, a CUDA error, an OOM kill) is handled like every crash (§13), and a resume removes both files | MUST |
 
 ### 23. Physics-tick ledger and durability

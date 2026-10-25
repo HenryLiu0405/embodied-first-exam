@@ -1,4 +1,4 @@
-"""The referee's toolkit: what every RoboOlympics task judges with. A task's verdict is an ordered sequence of
+"""The referee's toolkit: what every Embodied Olympics - Fun task judges with. A task's verdict is an ordered sequence of
 events (stages) under geometric conditions and contact rules, decided from the simulator's state after every physics
 step (1 ms), so a fast ball cannot pass a plane unseen and one touch that lasts many steps is one touch.
 
@@ -70,7 +70,7 @@ class Referee:
                 part = f"{side}_hand"
             else:
                 side, rest = bn.split("_", 1)
-                part = f"{side}_{PART_OF_BODY[rest]}"
+                part = f"{side}_{'hand' if rest.startswith('hand_') else PART_OF_BODY[rest]}"   # (a real hand's links)
                 if rest == "mount" and not gname.endswith("_palm_pad") and not gname.startswith(f"{side}_hand_"):
                     part = f"{side}_tool"           # a task's tool on the hand (a racket, a paddle, a club)
             if part not in names:

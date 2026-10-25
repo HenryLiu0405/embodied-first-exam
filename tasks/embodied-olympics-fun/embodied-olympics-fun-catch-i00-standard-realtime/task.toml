@@ -7,6 +7,9 @@ artifacts = [{ source = "/var/rcb-monitor/", service = "rcb_monitor" },
   { source = "/data/referee.json", service = "sim" },
   { source = "/data/replay.mp4", service = "sim" },
   { source = "/data/replay.last.png", service = "sim" },
+  { source = "/data/trajectory.first.npz", service = "sim" },
+  { source = "/data/replay.first.mp4", service = "sim" },
+  { source = "/data/replay.first.last.png", service = "sim" },
   { source = "/data/ticks.f64", service = "sim" },
   { source = "/data/calls.jsonl", service = "sim" },
   { source = "/data/submitted.f64", service = "sim" },
@@ -17,7 +20,7 @@ artifacts = [{ source = "/var/rcb-monitor/", service = "rcb_monitor" },
 
 [task]
 name = "embodied-first-exam/embodied-olympics-fun-catch-i00-standard-realtime"
-description = "STANDARD-REALTIME MODE (robot as a service on a clock that does not stop, eai-standard/2.3, slowdown S = 1): Embodied Olympics catch on the same frozen instance as embodied-olympics-fun-catch-i00-privileged. Catch the fly ball: grip the baseball with a hand before it touches the ground or your body, and keep hold of it. Once an attempt starts the venue does not wait; the agent drives the robot from a program of its own through the client: the robot's two head cameras (depth on one), its joint sensors and IMUs, the venue's fixed camera, and action chunks (walking, running, joint targets, Unitree LowCmd, the hands' grip). 10 resets, the last attempt graded; no object state, no referee state during an attempt. The sim service records every executed control step and grades the last attempt live with the family's referee (no grading replay)."
+description = "STANDARD-REALTIME MODE (robot as a service on a clock that does not stop, eai-standard/2.3, slowdown S = 1): Embodied Olympics catch on the same frozen instance as embodied-olympics-fun-catch-i00-privileged. Catch the fly ball: close one of your hands on the baseball before it touches the ground or your body, and keep it there. Once an attempt starts the venue does not wait; the agent drives the robot from a program of its own through the client: the robot's two head cameras (depth on one), its joint sensors and IMUs, the venue's fixed camera, and action chunks (walking, running, joint targets, Unitree LowCmd, the hands' grip). 5 resets, the last attempt graded; no object state, no referee state during an attempt. The sim service records every executed control step and grades the last attempt live with the family's referee (no grading replay)."
 authors = [{ name = "Kangrui Wang" }]
 keywords = ["robotics", "embodied-olympics", "sports", "mujoco", "unitree-h1-2", "humanoid", "standard-realtime-mode", "trajectory", "catch"]
 
@@ -34,10 +37,10 @@ slowdown = 1                      # standard-realtime: the world runs at 1/S of 
 network = "open"                 # the agent's egress (docs/protocol/README.md §2): open, the author's choice
 protocol = "eai-standard/2.3"
 instance_seed = 0
-reset_budget = 10
+reset_budget = 5
 expert_time_estimate_hours = 12.0
 oracle = "none"
-oracle_evidence = "no reference solution; the referee is tested: positive by injection (the real launch and flight; below 3 m the ball is put 0.12 m above the upturned palm at 3 m/s and really gripped); negatives: onto the trunk, touched while rising, dropped after the catch, a fall. The ball comes down 1.25 m from the robot after 3 s at 16.6 m/s: the walk and a palm placed within centimetres are the task; human review in the pull request that adds the benchmark (PROTOCOL §2.7)"
+oracle_evidence = "no reference solution; the referee is tested: Both hands are the H1-2's own Inspire five-finger hands at their default forces (20 N per fingertip, 30 N the thumb; no factor); a catch is one hand enclosing the ball (its fingers and its thumb or palm touching it from opposite sides, the two contact directions at least 90 degrees apart), held 1 s. The fly ball is thrown by the two-wheel pitching machine (21.4 m/s at the launch, it lands 1.32 m from the robot untouched). Positive by a declared magic action: real, the robot turns its palm up on stand rows and holds it there; injected once, when the descending ball is below 3 m it is put at rest on that palm; real, the hand closes round it, the catch and the 1 s hold (right and left hands; the same state hash twice). Negatives: nop (the ball lands within 3 m), onto the trunk, touched while still rising, the hand opened after the catch (the ball lies on the open palm: out of the hand), resting on the open palm never closed on (not caught in time), a fall. Stress: random arm targets with the ball in the hand, the ball at most 1.6 mm into the hand. Realtime: physics RTF about 2.1 on the reference workstation (estimated from a same-process comparison on a slower host), above 1.5.; human review in the pull request that adds the benchmark (PROTOCOL §2.7)"
 
 [metadata.resources]
 # minimum compute to run this task (docs/protocol/README.md §2.9)
@@ -50,7 +53,7 @@ recommended_gpu = "any NVIDIA GPU with EGL (RTX 4090 / L4)"
 verifier_min_cpus = 2.0
 verifier_min_memory_gb = 3.0
 verifier_min_gpu_memory_gb = 1.0
-measured = "as the standard twin; the GPU renders the cameras over EGL (2026-10-14): author estimate (an RTX 4090 workstation, 2026-10-11): CPU-only; the sim sidecar steps and renders on one or two cores (under 1 GB), the agent's container holds the harness and the client"
+measured = "as the standard twin, but the sidecar renders the cameras on the GPU over EGL (2026-10-14); the standard twin's author estimate (an RTX 4090 workstation, 2026-10-11): the sim sidecar steps the physics on one or two cores (under 1 GB), the agent's container holds the harness and the client"
 
 [metadata.resources.limits]
 # agent-phase limits in GiB (docs/protocol/README.md §2.10); scope: trial = every container, agent = the agent's container;

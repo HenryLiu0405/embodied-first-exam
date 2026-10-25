@@ -55,12 +55,13 @@ The rule is PROTOCOL Appendix H.5; how the runner applies it:
   gives no verdict on the agent: no, an unreadable or an unfinalized `final.json` (`finalized`: the verdict is on
   disk, written before any video); the sidecar gave up after crashes that were not all inside the agent's calls
   (`sim_crashed`), could not restore the episode after a crash (`resume_failed`, whatever crashed) or ended a native
-  call that hung past its deadline (`call_watchdog`); the scene did not start from the frozen instance, at the start or
+  call still unfinished 60 s (by default) past the service's own per-call cap, `max_call_wall_s` (`call_watchdog`, 2.4; never counted
+  from the request's deadline); the scene did not start from the frozen instance, at the start or
   after a reset (`instance_mismatch`). Only what the service itself records as `infra_error = 1` (or a missing,
   unreadable or unfinalized record) is one; a grader never infers it from missing fields. What the agent's commands
   caused stays a result, never an infrastructure failure (a retry would be a free second attempt): crashes all inside
-  its calls (`sim_crashed_on_call`), a simulator error its actions raised where the task counts that as the agent's
-  (standard-realtime: a simulator error or crash after the agent's first command, standard_mode.md Part 3), the cutoff, no actions, a failed settle or hold, and a crash or error while the service
+  its calls (`sim_crashed_on_call`), a simulator error its actions raised (PROTOCOL §4; standard-realtime: a simulator
+  error or crash after the agent's first command, standard_mode.md Part 3), the cutoff, no actions, a failed settle or hold, and a crash or error while the service
   runs a settle or hold window on the agent's final state (it counts as one inside the agent's last call). The video is
   never one: a render that fails or runs out of time loses only the video. A resume that continued from a state that
   does not match its checkpoint exactly (`approx` resume class, `resume_state_mismatch = 1`) keeps its live verdict
@@ -71,8 +72,11 @@ Results are not committed (published on the [results site](https://www.embodied-
 `<harness>-<model>-<effort>`, the model token with underscores: `codex-gpt6_luna-xhigh`; provider, tier and settings go
 in the metadata). `scripts/write_task_results.py` writes, per task and run id, `README.md`, `config.json` (the trial's
 effective configuration: `protocol_version`, `mode`, `cutoff_s`, `reset_budget`, `slowdown`, `seed`, `network`,
-`validated`, `set`, `oracle`, `service_protocol`, `digest`, the result and whether it counts; a result dir from before v2.0
-gets its fields from the task at that digest, else `"legacy"`) and `attempts.json`. Rankings (the batch summary,
+`validated`, `set`, `oracle`, `service_protocol`, `digest`, the result, the first-attempt result `first_success`
+(standard modes: reward.json's `first_success`; a verifier that does not write it, the graded success when no reset
+was made, else 0) and whether it counts; a trial of another version of the task, whose digest is neither the task's
+DIGEST nor that of the runner's copy of it and whose seed is not known from a runner's copy, keeps only what its name says, and its other fields, `protocol_version`
+included, are `"legacy"`) and `attempts.json`. Rankings (the batch summary,
 the results site) compare trials only within one comparable configuration (`task_conventions.config_key`: protocol
 version, mode, cutoff, reset budget, S, network), report success together with cost (tokens, money, turns, wall clock,
 simulation steps), and align reasoning effort, `max_turns` and the token budget before comparing agents. Validated and
@@ -136,17 +140,22 @@ Codex session (`agent/sessions/`). Run Codex with `--ak reasoning_summary=detail
   `artifacts/data/` or `artifacts/out/` is flagged by the runner (`no_video`, with the reason it can read), unless it
   is a privileged trial whose agent submitted no trajectory that replays. A video a trial missed (the render ran out of
   its time bound, crashed, or the task rendered none) is rendered afterwards from the recorded trajectory in the
-  task's own image, on the same host class when the replay is only reproducible there, and kept only when the replay
-  reaches the recorded final state; `replay.regenerated.json` next to it says how. The grade is never touched, and
+  task's own image, only where a post-hoc replay is allowed (PROTOCOL §4), on the same host class when the replay is
+  only reproducible there, and kept only when the replay reaches the recorded final state; `replay.regenerated.json` next to it says how. The grade is never touched, and
   the agent is never rerun for a video.
-- **Standard modes:** no replay grades the episode (PROTOCOL H.4), so the video is what the sidecar recorded during the
-  live episode where that is cheap, or one render of the recorded trajectory after the verdict (each benchmark's doc
-  says which, and what it costs). Either way the verdict is on disk first (`final.json` `finalized`; `video_pending`
-  while the render runs) and `final.json` says `video_source` (`live` / `render`).
+- **Standard modes:** no replay grades the episode (PROTOCOL H.4). The video is a post-hoc replay by default, and a live
+  recording where the benchmark's simulator is not verified bit-wise replayable (PROTOCOL §4). Either way the verdict is on
+  disk first (`final.json` `finalized`; `video_pending` while the video is made) and `final.json` says `video_source`
+  (`live` / `render`). Published videos follow the same rule and keep the label.
+- **First attempt (standard modes with resets):** only benchmarks on the shared 2.1 sidecar service (`rcb_service.py`,
+  standard_mode.md "Evidence and grading") graded by the shared grader (`embodied_first_exam/standard/v2_1/grade.py`)
+  keep the first episode (`trajectory.first.npz`, `replay.first.mp4`) and how it ended. A task whose sidecar runs a
+  service of its own reports `resets` only: its `first_success` is the graded success when `resets` = 0, else 0, and the first
+  episode is not kept.
 - **Standard mode (RoboTwin):** the sim service records `live.mp4` (six views, frames only while physics runs and something moves,
   each stamped with the agent's call and wall/sim time; rendered from the trajectory after the verdict, in the same pass
   as `replay.mp4`, so it costs the agent nothing; `RCB_LIVE=realtime` captures during the episode instead), the exact actions of every call,
-  and a crash-safe trajectory. Details: `standard_mode.md` (Live recording). Protocol 2.1 also gives the
+  and a crash-safe trajectory. Details: `standard_mode.md` (Live recording). The wire protocol `eai-standard/2.1` also gives the
   agent measured proprioception (encoders, gripper opening, TCP pose, drive effort) and optional depth noise.
 - **Privileged mode:** the agent owns the simulator, so nothing it produces is evidence. `rcb_traj.Session` still dumps every
   rollout's per-step drive targets to `/app/output/rcb_trace/` (`RCB_AGENT_TRACE_DIR`, capped at 300 files / 400 MB),

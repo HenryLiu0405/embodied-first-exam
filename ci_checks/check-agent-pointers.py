@@ -51,17 +51,17 @@ FILES = re.compile(r"""(?<![\w.-])(?:[\w.-]+\.(?:hdf5|h5|mcap|parquet|rlds|tfrec
 ALLOW = [
     (r"^maniguard-", r"^environment/instance/NOTICE$", r"datasets/IDEAS-Lab-Northwestern/ManiGuard-Bench|github\.com/NU-IDEAS-Lab/ManiGuard",
      "CC BY-NC 4.0 attribution the licence requires, of the scene files' dataset (its demonstrations are other datasets, not named)"),
-    (r"^roboengineer-anycar-", r"^(?:environment/public/(?:scripts/control_transfer/components/)?anycarbench/(?:NOTICE|circuits\.json)|files:control-transfer-anycar-files/circuits\.json|files:roboengineer-files/standard/environment/public/anycarbench/NOTICE)$",
+    (r"^roboengineer-anycar-", r"^(?:environment/public/(?:scripts/control_transfer/components/)?anycarbench/(?:NOTICE|circuits\.json)|files:roboengineer-files/anycarbench/circuits\.json|files:roboengineer-files/standard/environment/public/anycarbench/NOTICE)$",
      r"^https://github\.com/f1db/f1db/?$",
      "CC BY 4.0 attribution the licence requires, of F1DB's historical circuit outlines (track geometry the instruction "
      "gives the agent, not a controller or a demonstration)"),
 ]
 
 
-# (source directory, image name, its files): several images may share one source directory (a benchmark's files image and
-# its sidecars' image); a file is reported under the first that lists it, sidecar images last
-SOURCES = [(ROOT / s["source"], f.parent.name, set(s["files"])) for f in sorted((ROOT / "images").glob("*/FILES.json"),
-           key=lambda f: (f.parent.name.endswith("-sim-files"), f.parent.name)) for s in [files_image.spec(f.parent.name)]]
+# (source directory, image name, its files): several images may share one source directory; a file is reported under
+# the first (by image name) that lists it
+SOURCES = [(ROOT / s["source"], f.parent.name, set(s["files"])) for f in sorted((ROOT / "images").glob("*/FILES.json"))
+           for s in [files_image.spec(f.parent.name)]]
 
 
 def files_name(src: pathlib.Path) -> str:

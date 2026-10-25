@@ -15,7 +15,7 @@ Directions are from the robot at the start: +x is the way you face, +y is to you
 
 - TR 30.1.3 (somersaulting) and TR 30.1.6 / 30.2 (how the athlete leaves the landing area) are not judged; the landing is judged for 2.0 s from the first contact with the sand
 - TR 29.3 (the plasticine indicator board): no imprint; the take-off line is judged geometrically: a foot on the ground with any part of it (also a part in the air) on or over the line's plane is a failure
-- TR 29.6 (the sand): the pit is a box with a soft, overdamped, high-friction contact (time constant 0.05 s, full stiffness only 0.04 m deep, friction 1.5); it gives under the feet but keeps no imprint, so the mark is the contact with the sand nearest the take-off line
+- TR 29.6 (the sand): the pit is a box whose contact follows the sinking of a plate into dry silica sand (a resistance growing in proportion to depth, Agarwal et al. 2019; friction 0.67, the sand's internal friction; MuJoCo's contact fitted to that law on this robot: a time constant of 0.15 s, damping ratio 2.0, an impedance falling from 0.95 to 0.4 over 0.05 m): it gives 7 mm under the standing robot and about 7 cm under a landing at 2.5 m/s and does not push back; it is not loose damp sand that flows, it is not raked, and it keeps no imprint, so the mark is the contact with the sand nearest the take-off line
 - TR 30 does not define a jump; here the flight into the pit must raise the pelvis at least 0.05 m above its height at lift-off (pulling the feet up and falling into the pit is no jump)
 - the rule book's wind gauge: there is no wind; the athlete alone, one trial
 
@@ -28,7 +28,7 @@ A referee in the service decides this from the simulator's state. The events tha
 ## Real-robot rules
 - **Attempts.** The first episode starts when the service comes up. `r.reset()` abandons the running attempt (or
   follows one that has ended) and starts a new one from the same start; `spec()["budget"]["reset"]` says how many
-  resets you have (50 here). **Only your last attempt is graded**, and a success ends the trial at once.
+  resets you have (5 here). **Only your last attempt is graded**, and a success ends the trial at once.
 - **Time moves only inside calls.** `submit` runs your rows and `get_obs(seconds=s)` holds the command in force for
   s seconds; both use up the attempt's time. Between calls the robot waits, frozen, while you think; `get_obs()` with
   no seconds is free.
@@ -159,11 +159,7 @@ What the platform does and does not do for you:
   what bounds the joint itself is the motor's torque-speed curve (a `lowcmd` feed-forward torque can turn a joint up to
   about 1.15 times that speed, where the motor's torque has fallen to zero).
 - **The hands** have no working fingers here; each carries a fist pad (a box of 4.4 × 8 × 10 cm beyond the wrist, the
-  10 cm along the forearm) with a grip: while `grip_left` / `grip_right` ≥ 0.5 the hand holds the nearest grippable
-  object whose surface is within 3.5 cm of the palm point (the middle of the pad, 4.5 cm beyond the wrist flange along
-  the forearm) and that moves at most 6 m/s relative to it; below 0.5 it lets go at once. Since the palm point is inside
-  the pad, an object can be gripped where it touches one of the pad's two broad faces, not at its narrow sides or its
-  far end. What is grippable is the task's own equipment, named in the rules.
+  10 cm along the forearm). Nothing in this task is grippable: `grip_left` and `grip_right` have no effect.
 - **A tool on a hand** (a racket, a paddle, a club; where the task has one) is fixed to the wrist in place of the pad.
   It collides with the world, the ball and the rest of your own body.
 - **The air** is real: balls and implements feel drag and, when they spin, lift.

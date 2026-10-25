@@ -9,7 +9,7 @@ move while you think. **Task:** Set the pass: with one overhead contact of your 
 S x 10 ms of wall-clock time (real time). `spec()["timing"]["slowdown"]` states it.
 
 ## The venue
-You face +x, along the net, which is 1 m to your right; the back court is to your left. The ball waits 0.9 m above the floor in the back court, 5.5 m to your left and 1.5 m ahead of you. About 3 s after the start it is tossed; it climbs to about 3.8 m and comes down steeply (about 56 degrees below the horizontal) at just under 7 m/s, travelling from your left to your right. About 1.36 s after the toss it is 2.1 m above the floor about 0.25 m in front of your head; untouched it lands beside the centre line to your right. The hitter's target is painted on the floor 5 m ahead of you.
+You face +x, along the net, which is 1 m to your right; the back court is to your left. A volleyball machine stands in the back court, its wheels 0.9 m above the floor, 5.5 m to your left and 1.5 m ahead of you, aimed up towards you. About 3.0 s after the start it tosses the ball; it climbs to about 3.8 m and comes down steeply (about 56 degrees below the horizontal) at just under 7 m/s, travelling from your left to your right. About 1.3 s after the toss it is 2.1 m above the floor about 0.25 m in front of your head; untouched it lands beside the centre line to your right. The hitter's target is painted on the floor 5 m ahead of you.
 
 Directions are from the robot at the start: +x is the way you face, +y is to your left, +z is up; the floor is level.
 
@@ -17,13 +17,14 @@ Directions are from the robot at the start: +x is the way you face, +y is to you
 ## The rules
 **Rule book:** FIVB Official Volleyball Rules 2025-2028: Rule 1 (the court 18 m x 9 m, the front zone between the centre line and the attack line 3 m from it), Rule 2 (the men's net, top at 2.43 m, the antennas), Rule 3 (the ball: 65-67 cm round, 260-280 g), Rule 9.2 (the hit: not caught or thrown, one contact), Rule 11 (no contact with the net, the foot not wholly beyond the centre line). Where this task departs from it:
 
-- The pass is a scripted launch: a ball tossed without spin from the back court, the same in every attempt, instead of a team-mate.
+- The pass is played by a two-wheel volleyball machine standing in the back court instead of a team-mate, the same in every attempt: its wheels, at equal speeds, drive the ball out 0.9 m above the floor at about 9 m/s without spin, steeply up towards the setter.
 - Rule 9.2 (the overhead pass with the fingers): the robot has no fingers, so the set is one contact of the hands (the parts beyond the wrists) with the ball's centre above the top of the robot's head (0.76 m above its waist joint along the trunk, about 1.80 m when it stands). 'Not caught or thrown' is a contact of at most 0.1 s (the ball cannot be gripped).
 - A set is judged by numbers instead of a referee's eye: the ball must leave the hands moving upward and at least 1.0 times as fast as it arrived (hands held still in the ball's path return it at no more than three quarters of its speed: that is a rebound, not a set); it must be played after it has passed its highest point, by a setter who has stayed in the front zone.
 - Nobody attacks the set: a good set is defined as volleyball coaching grades it, a ball that rises at least 1.0 m above the net and comes down in the outside hitter's target, a circle of 1.0 m radius at position 4, judged where the ball first touches the floor.
+- Rule 2: the net is a rigid panel 1 m deep and the posts and antennas are rigid (a real net is a mesh under tension that gives); a robot touching any of them commits the Rule 11 fault all the same.
 - No team-mates or opponents, no wind.
 
-You are the setter on an official volleyball court (9.0 m by 9.0 m on each side of the net; the net's top 2.43 m high). You stand in your front zone facing along the net: the net is 1.0 m to your right, the attack line 3.0 m from the centre line to your left, the side line of position 2 3.0 m behind you, the side line of position 4 ahead of you. A volleyball (0.21 m across, 0.27 kg, in air) is tossed to you from the back court 3.0 s after the start and comes down above you. The set is the ball's first contact after the toss, before it touches the floor: with your hands (the parts beyond the wrists; one or both), overhead (the ball's centre above the top of your head, which is 0.76 m above your waist joint along the trunk), after the ball has passed its highest point, all contacts within 0.1 s, over when the ball has been clear of you for 0.03 s. It must be a set, not a rebound: the ball leaves your hands moving upward and at least 1.0 times as fast as it was just before they touched it. Then the ball's centre must rise at least 1.0 m above the net's top, and the ball must come down in the outside hitter's target: its first contact with the floor is inside a circle of 1.0 m radius whose centre is 1.0 m from the net on your side and 1.0 m inside the side line ahead of you. That is the success. You fail if the ball touches the floor before your set, if any part of you other than a hand touches the ball, if the ball's centre is not above the top of your head when your hands first touch it, if you touch it before it has passed its highest point, if the contacts last longer than 0.1 s (the ball held), if the ball leaves your hands downward or slower than that, if you touch the ball again, if it does not rise that high or comes down outside the target, if before your set your pelvis is farther from the net than the attack line (you left the front zone), if you touch the net, an antenna or a post, if a foot of yours is on the floor wholly beyond the centre line, if you fall (your pelvis lower than 0.35 m above the floor, or any part of you other than the feet on the floor), or after 10 s. The ball cannot be gripped, and it cannot be touched while it waits to be tossed.
+You are the setter on an official volleyball court (9.0 m by 9.0 m on each side of the net; the net's top 2.43 m high). You stand in your front zone facing along the net: the net is 1.0 m to your right, the attack line 3.0 m from the centre line to your left, the side line of position 2 3.0 m behind you, the side line of position 4 ahead of you. A volleyball (0.21 m across, 0.27 kg, in air) is tossed to you from the back court 3.0 s after the start and comes down above you. The set is the ball's first contact after the toss, before it touches the floor: with your hands (the parts beyond the wrists; one or both), overhead (the ball's centre above the top of your head, which is 0.76 m above your waist joint along the trunk), after the ball has passed its highest point, all contacts within 0.1 s, over when the ball has been clear of you for 0.03 s. It must be a set, not a rebound: the ball leaves your hands moving upward and at least 1.0 times as fast as it was just before they touched it. Then the ball's centre must rise at least 1.0 m above the net's top, and the ball must come down in the outside hitter's target: its first contact with the floor is inside a circle of 1.0 m radius whose centre is 1.0 m from the net on your side and 1.0 m inside the side line ahead of you. That is the success. You fail if you touch the ball machine or the ball waiting in it, if the ball touches the floor before your set, if any part of you other than a hand touches the ball, if the ball's centre is not above the top of your head when your hands first touch it, if you touch it before it has passed its highest point, if the contacts last longer than 0.1 s (the ball held), if the ball leaves your hands downward or slower than that, if you touch the ball again, if it does not rise that high or comes down outside the target, if before your set your pelvis is farther from the net than the attack line (you left the front zone), if you touch the net, an antenna or a post, if a foot of yours is on the floor wholly beyond the centre line, if you fall (your pelvis lower than 0.35 m above the floor, or any part of you other than the feet on the floor), or after 10 s. The ball cannot be gripped.
 
 A referee in the service decides this from the simulator's state. The events that must happen, in order, are
 **set → above the net → in the target**. An attempt (an episode) ends at the success, at the first rule violation, or after 10 s
@@ -42,7 +43,7 @@ A referee in the service decides this from the simulator's state. The events tha
   Use your turns to start attempts, read what happened, and improve the program.
 - **Attempts.** `r.reset()` abandons the running attempt (or follows one that has ended) and starts a new one from the
   same start, paused until your next `submit`; `spec()["budget"]["reset"]` says how many resets you have
-  (10 here; authoritative: if it says 0, the one attempt is the run). Once an attempt has ended,
+  (5 here; authoritative: if it says 0, the one attempt is the run). Once an attempt has ended,
   `submit` raises `EpisodeOver` until you reset. **Only your last attempt is graded**, and a success ends the trial at
   once. The wall clock is the run's and never restarts.
 - **No privileged state.** You get what the robot's own sensors give: its two head cameras (`head_left`,
@@ -122,31 +123,31 @@ Joint order everywhere (Unitree's SDK order), with each joint's range, speed lim
 
 | # | joint | range (rad) | speed (rad/s) | torque (N m) | kp | kd | at the start (rad) |
 |---|---|---|---|---|---|---|---|
-| 0 | `left_hip_yaw` | [-0.43, 0.43] | 23 | 200 | 800 | 10 | 0 |
-| 1 | `left_hip_pitch` | [-3.14, 2.5] | 23 | 200 | 800 | 10 | -0.16 |
-| 2 | `left_hip_roll` | [-0.43, 3.14] | 23 | 200 | 800 | 10 | 0 |
-| 3 | `left_knee` | [-0.26, 2.05] | 14 | 300 | 1200 | 16 | 0.36 |
-| 4 | `left_ankle_pitch` | [-0.8973, 0.5236] | 9 | 60 | 160 | 8 | -0.2 |
+| 0 | `left_hip_yaw` | [-0.43, 0.43] | 23 | 360 | 800 | 10 | 0 |
+| 1 | `left_hip_pitch` | [-3.14, 2.5] | 23 | 360 | 800 | 10 | -0.16 |
+| 2 | `left_hip_roll` | [-0.43, 3.14] | 23 | 360 | 800 | 10 | 0 |
+| 3 | `left_knee` | [-0.26, 2.05] | 14 | 360 | 1200 | 16 | 0.36 |
+| 4 | `left_ankle_pitch` | [-0.8973, 0.5236] | 9 | 66.88 | 160 | 8 | -0.2 |
 | 5 | `left_ankle_roll` | [-0.2618, 0.2618] | 9 | 40 | 160 | 8 | 0 |
-| 6 | `right_hip_yaw` | [-0.43, 0.43] | 23 | 200 | 800 | 10 | 0 |
-| 7 | `right_hip_pitch` | [-3.14, 2.5] | 23 | 200 | 800 | 10 | -0.16 |
-| 8 | `right_hip_roll` | [-3.14, 0.43] | 23 | 200 | 800 | 10 | 0 |
-| 9 | `right_knee` | [-0.26, 2.05] | 14 | 300 | 1200 | 16 | 0.36 |
-| 10 | `right_ankle_pitch` | [-0.8973, 0.5236] | 9 | 60 | 160 | 8 | -0.2 |
+| 6 | `right_hip_yaw` | [-0.43, 0.43] | 23 | 360 | 800 | 10 | 0 |
+| 7 | `right_hip_pitch` | [-3.14, 2.5] | 23 | 360 | 800 | 10 | -0.16 |
+| 8 | `right_hip_roll` | [-3.14, 0.43] | 23 | 360 | 800 | 10 | 0 |
+| 9 | `right_knee` | [-0.26, 2.05] | 14 | 360 | 1200 | 16 | 0.36 |
+| 10 | `right_ankle_pitch` | [-0.8973, 0.5236] | 9 | 66.88 | 160 | 8 | -0.2 |
 | 11 | `right_ankle_roll` | [-0.2618, 0.2618] | 9 | 40 | 160 | 8 | 0 |
 | 12 | `torso` | [-2.35, 2.35] | 23 | 200 | 600 | 15 | 0 |
-| 13 | `left_shoulder_pitch` | [-3.14, 1.57] | 9 | 40 | 300 | 6 | 0 |
-| 14 | `left_shoulder_roll` | [-0.38, 3.4] | 9 | 40 | 300 | 6 | 0 |
-| 15 | `left_shoulder_yaw` | [-2.66, 3.01] | 20 | 18 | 200 | 4 | 0 |
-| 16 | `left_elbow_pitch` | [-0.95, 3.18] | 20 | 18 | 200 | 4 | 0 |
-| 17 | `left_elbow_roll` | [-3.01, 2.75] | 31.4 | 19 | 80 | 1.5 | 0 |
+| 13 | `left_shoulder_pitch` | [-3.14, 1.57] | 9 | 130 | 300 | 6 | 0 |
+| 14 | `left_shoulder_roll` | [-0.38, 3.4] | 9 | 60 | 300 | 6 | 0 |
+| 15 | `left_shoulder_yaw` | [-2.66, 3.01] | 20 | 60 | 200 | 4 | 0 |
+| 16 | `left_elbow_pitch` | [-0.95, 3.18] | 20 | 60 | 200 | 4 | 0 |
+| 17 | `left_elbow_roll` | [-3.01, 2.75] | 31.4 | 60 | 80 | 1.5 | 0 |
 | 18 | `left_wrist_pitch` | [-0.47, 0.47] | 31.4 | 19 | 60 | 1 | 0 |
 | 19 | `left_wrist_yaw` | [-1.27, 1.27] | 31.4 | 19 | 60 | 1 | 0 |
-| 20 | `right_shoulder_pitch` | [-3.14, 1.57] | 9 | 40 | 300 | 6 | 0 |
-| 21 | `right_shoulder_roll` | [-3.4, 0.38] | 9 | 40 | 300 | 6 | 0 |
-| 22 | `right_shoulder_yaw` | [-3.01, 2.66] | 20 | 18 | 200 | 4 | 0 |
-| 23 | `right_elbow_pitch` | [-0.95, 3.18] | 20 | 18 | 200 | 4 | 0 |
-| 24 | `right_elbow_roll` | [-2.75, 3.01] | 31.4 | 19 | 80 | 1.5 | 0 |
+| 20 | `right_shoulder_pitch` | [-3.14, 1.57] | 9 | 130 | 300 | 6 | 0 |
+| 21 | `right_shoulder_roll` | [-3.4, 0.38] | 9 | 60 | 300 | 6 | 0 |
+| 22 | `right_shoulder_yaw` | [-3.01, 2.66] | 20 | 60 | 200 | 4 | 0 |
+| 23 | `right_elbow_pitch` | [-0.95, 3.18] | 20 | 60 | 200 | 4 | 0 |
+| 24 | `right_elbow_roll` | [-2.75, 3.01] | 31.4 | 60 | 80 | 1.5 | 0 |
 | 25 | `right_wrist_pitch` | [-0.47, 0.47] | 31.4 | 19 | 60 | 1 | 0 |
 | 26 | `right_wrist_yaw` | [-1.27, 1.27] | 31.4 | 19 | 60 | 1 | 0 |
 
@@ -172,11 +173,7 @@ What the platform does and does not do for you:
   what bounds the joint itself is the motor's torque-speed curve (a `lowcmd` feed-forward torque can turn a joint up to
   about 1.15 times that speed, where the motor's torque has fallen to zero).
 - **The hands** have no working fingers here; each carries a fist pad (a box of 4.4 × 8 × 10 cm beyond the wrist, the
-  10 cm along the forearm) with a grip: while `grip_left` / `grip_right` ≥ 0.5 the hand holds the nearest grippable
-  object whose surface is within 3.5 cm of the palm point (the middle of the pad, 4.5 cm beyond the wrist flange along
-  the forearm) and that moves at most 6 m/s relative to it; below 0.5 it lets go at once. Since the palm point is inside
-  the pad, an object can be gripped where it touches one of the pad's two broad faces, not at its narrow sides or its
-  far end. What is grippable is the task's own equipment, named in the rules.
+  10 cm along the forearm). Nothing in this task is grippable: `grip_left` and `grip_right` have no effect.
 - **A tool on a hand** (a racket, a paddle, a club; where the task has one) is fixed to the wrist in place of the pad.
   It collides with the world, the ball and the rest of your own body.
 - **The air** is real: balls and implements feel drag and, when they spin, lift.

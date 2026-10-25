@@ -1,8 +1,8 @@
-"""rcb_rfo.py -- RoboOlympics tooling for Embodied First Exam (docs/benchmarks/roboolympics.md).
+"""rcb_rfo.py -- Embodied Olympics - Fun tooling for Embodied First Exam (tasks/embodied-olympics-fun/README.md).
 
-One module, copied unchanged into every RoboOlympics task: the privileged environment (`Session`), the privileged
+One module, copied unchanged into every Embodied Olympics - Fun task: the privileged environment (`Session`), the privileged
 verifier (`replay`) and the standard sim service (`Episode`, driven by sim/server.py). The world is the `rfo` package
-next to it (the RoboOlympics Unitree G1 or H1-2 in a sports venue, rfo/world.py) with the family's own rules,
+next to it (the Unitree G1 or H1-2 of the Embodied Olympics robot library in a sports venue, rfo/world.py) with the family's own rules,
 `rfo_task.py`.
 
 A control step is 10 ms (10 physics steps of 1 ms). An action is a row of one of the action types
@@ -35,7 +35,7 @@ Python (privileged mode):
     s.reset()                                  # back to the frozen start (unlimited); clears s.rows
     s.replay()                                 # what the verifier will do with s.rows, in a fresh world
     s.save_trajectory()                        # /app/output/trajectory.npz (the deliverable): s.rows as sim rows
-CLI (the verifiers, make_instances.py):
+CLI (the verifiers, and writing a frozen instance):
     python rcb_rfo.py replay --instance instance.json --traj trajectory.npz --out r.json [--video replay.mp4]
     python rcb_rfo.py instance --family <family> --seed <seed> --out instance.json
 """
@@ -62,7 +62,7 @@ def load_instance(path) -> dict:
 
 
 class Episode:
-    """One frozen RoboOlympics instance: the world, the action types, the sensors."""
+    """One frozen Embodied Olympics - Fun instance: the world, the action types, the sensors."""
 
     def __init__(self, instance: dict):
         from rfo import load_task
@@ -402,7 +402,7 @@ def make_instance(family: str, seed: int = 0, params: dict | None = None) -> dic
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="RoboOlympics tooling: replay a trajectory, or write a frozen instance")
+    ap = argparse.ArgumentParser(description="Embodied Olympics - Fun tooling: replay a trajectory, or write a frozen instance")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("replay")
     r.add_argument("--instance", required=True)
