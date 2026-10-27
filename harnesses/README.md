@@ -6,6 +6,11 @@ HumanCLAW `harness-improving` branch at
 environment bindings, evaluation pipeline, harness improvements, tools, tests,
 resources, configurations, and committed documentation/evidence.
 
+For the next integration steps, read the [HumanCLAW → EFE handoff](HUMANCLAW_EFE_HANDOFF.md).
+It covers both HumanCLAW Harbor-format tasks and the harness integration, with
+source references, environment/assets setup, interface contracts, implementation
+steps and acceptance checks. These integration steps remain to be implemented.
+
 The source is kept together so its package names, resource paths, scripts, and
 internal links continue to resolve. There is no separate extracted
 `efe_adaptive` package. Run HumanCLAW commands from `harnesses/humanclaw/`.
