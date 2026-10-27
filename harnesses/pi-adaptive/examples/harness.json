@@ -1,0 +1,25 @@
+{
+  "pi_profile": "adaptive-v1",
+  "api_key_env": "EFE_API_KEY",
+  "auth": "bearer",
+  "context_window": 131072,
+  "timeout_seconds": 3600,
+  "request_timeout_seconds": 600,
+  "startup_timeout_seconds": 120,
+  "pi_adaptive": {
+    "recent_exchanges": 8,
+    "trim_at_exchanges": 16,
+    "model_capabilities": {
+      "model": "test-model",
+      "api": "openai-responses",
+      "effort_map": {
+        "medium": "medium",
+        "high": "high"
+      },
+      "max_images": 20,
+      "image_token_reserve": 4096,
+      "max_input_tokens": 110000
+    }
+  },
+  "responses_base_url_env": "EFE_RESPONSES_BASE_URL"
+}

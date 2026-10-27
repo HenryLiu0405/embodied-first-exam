@@ -1,0 +1,5 @@
+{
+  "model": "test-model",
+  "max_tokens": 8192,
+  "send_temperature": false
+}
