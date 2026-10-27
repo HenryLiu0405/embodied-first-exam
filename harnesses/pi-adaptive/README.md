@@ -15,6 +15,9 @@ This module has its own model transport and adaptive tools; it is not selected
 by `efe`, `harbor run` or the existing batch scripts. No task, verifier, cutoff,
 network policy or existing execution path is changed.
 
+For the process diagram, module responsibilities, interface lifecycle, and a
+file-by-file review/testing guide, read [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Install and check
 
 Tested with Python 3.13 and Node.js 26 on macOS. The SDK requires Node.js
